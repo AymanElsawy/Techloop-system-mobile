@@ -38,7 +38,8 @@ class _SupplierFormState extends State<_SupplierForm> {
   bool _saving = false;
   String? _error;
 
-  String? _v(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
+  String? _v(TextEditingController c) =>
+      c.text.trim().isEmpty ? null : c.text.trim();
 
   Future<void> _save() async {
     setState(() {
@@ -75,12 +76,23 @@ class _SupplierFormState extends State<_SupplierForm> {
           children: [
             Text(
               s == null ? 'مورد جديد' : 'تعديل المورد',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 14),
-            Input(label: 'اسم المورد *', controller: _name, onChanged: (_) => setState(() {})),
+            Input(
+              label: 'اسم المورد *',
+              controller: _name,
+              onChanged: (_) => setState(() {}),
+            ),
             const SizedBox(height: 14),
-            Input(label: 'الهاتف', controller: _phone, keyboard: TextInputType.phone, ltr: true),
+            Input(
+              label: 'الهاتف',
+              controller: _phone,
+              keyboard: TextInputType.phone,
+              ltr: true,
+            ),
             const SizedBox(height: 14),
             Input(label: 'الشركة', controller: _company),
             const SizedBox(height: 14),
@@ -93,7 +105,10 @@ class _SupplierFormState extends State<_SupplierForm> {
               loading: _saving,
               onPressed: _name.text.trim().length < 2 ? null : _save,
             ),
-            if (_error != null) ...[const SizedBox(height: 12), Note(_error!, tone: Tone.danger)],
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Note(_error!, tone: Tone.danger),
+            ],
           ],
         ),
       ),

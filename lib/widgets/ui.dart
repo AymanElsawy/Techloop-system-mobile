@@ -2,22 +2,40 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/api.dart';
 import '../core/theme.dart';
 
 Future<T?> push<T>(BuildContext context, Widget screen) =>
     Navigator.of(context).push<T>(MaterialPageRoute(builder: (_) => screen));
 
-Future<T?> replace<T>(BuildContext context, Widget screen) =>
-    Navigator.of(context).pushReplacement<T, Object?>(MaterialPageRoute(builder: (_) => screen));
+Future<T?> replace<T>(BuildContext context, Widget screen) => Navigator.of(
+  context,
+).pushReplacement<T, Object?>(MaterialPageRoute(builder: (_) => screen));
 
-void toast(BuildContext context, String message) =>
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+const savedOfflineMessage =
+    'مفيش اتصال: اتحفظ على الموبايل وهيتبعت أول ما النت يرجع.';
+
+void toast(BuildContext context, String message) => ScaffoldMessenger.of(
+  context,
+).showSnackBar(SnackBar(content: Text(message)));
+
+/// Copies [link] (e.g. رابط المديونية) to the clipboard and confirms with a toast.
+Future<void> copyLink(BuildContext context, Future<String> link) async {
+  try {
+    await Clipboard.setData(ClipboardData(text: await link));
+    if (context.mounted) toast(context, 'تم نسخ الرابط');
+  } catch (e) {
+    if (context.mounted) toast(context, errorMessage(e));
+  }
+}
 
 /// tel: / maps links.
 Future<void> openUrl(BuildContext context, String url) async {
-  if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication) && context.mounted) {
+  if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication) &&
+      context.mounted) {
     toast(context, 'تعذر فتح الرابط.');
   }
 }
@@ -78,7 +96,10 @@ class StatusBadge extends StatelessWidget {
     final (bg, fg) = tone.colors(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Text(
         label,
         style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600),
@@ -102,7 +123,10 @@ class Note extends StatelessWidget {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: Text(text, style: TextStyle(color: fg, fontSize: 13.5)),
       ),
     );
@@ -110,6 +134,7 @@ class Note extends StatelessWidget {
 }
 
 /// Card with a title bar and rows separated by dividers.
+/// [collapsible]: an accordion, closed until the title is tapped.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -118,6 +143,7 @@ class SectionCard extends StatelessWidget {
     this.empty = '',
     this.trailing,
     this.titleColor,
+    this.collapsible = false,
   });
 
   final String title;
@@ -125,41 +151,73 @@ class SectionCard extends StatelessWidget {
   final String empty;
   final Widget? trailing;
   final Color? titleColor;
+  final bool collapsible;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final titleText = Text(
+      title,
+      style: TextStyle(
+        fontWeight: FontWeight.w700,
+        fontSize: 15,
+        color: titleColor,
+      ),
+    );
+    final body = [
+      Divider(height: 1, color: c.border),
+      if (children.isEmpty)
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(
+            empty,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: c.muted),
+          ),
+        )
+      else
+        for (var i = 0; i < children.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: c.border),
+          children[i],
+        ],
+    ];
+    if (collapsible) {
+      return Card(
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          title: titleText,
+          // Chevron on the start side so [trailing] (e.g. "عرض الكل") keeps the end.
+          controlAffinity: ListTileControlAffinity.leading,
+          trailing: trailing,
+          tilePadding: const EdgeInsetsDirectional.only(start: 8, end: 12),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          childrenPadding: EdgeInsets.zero,
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          children: body,
+        ),
+      );
+    }
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(16, trailing == null ? 14 : 6, 12, trailing == null ? 10 : 2),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              trailing == null ? 14 : 6,
+              12,
+              trailing == null ? 10 : 2,
+            ),
             child: Row(
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: titleColor),
-                  ),
-                ),
+                Expanded(child: titleText),
                 ?trailing,
               ],
             ),
           ),
-          Divider(height: 1, color: c.border),
-          if (children.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                empty,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.muted),
-              ),
-            )
-          else
-            for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: c.border), children[i]],
+          ...body,
         ],
       ),
     );
@@ -209,9 +267,15 @@ class Tile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     if (subtitle != null && subtitle!.isNotEmpty)
-                      Text(subtitle!, style: TextStyle(fontSize: 12, color: c.muted)),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(fontSize: 12, color: c.muted),
+                      ),
                   ],
                 ),
               ),
@@ -223,14 +287,26 @@ class Tile extends StatelessWidget {
                   children: [
                     Text(
                       trailing!,
-                      style: TextStyle(fontWeight: FontWeight.w700, color: trailingColor),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: trailingColor,
+                      ),
                     ),
                     if (trailingHint != null)
-                      Text(trailingHint!, style: TextStyle(fontSize: 11.5, color: trailingHintColor ?? c.muted)),
+                      Text(
+                        trailingHint!,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: trailingHintColor ?? c.muted,
+                        ),
+                      ),
                   ],
                 ),
               ],
-              if (onTap != null) ...[const SizedBox(width: 4), Icon(Icons.chevron_left, size: 20, color: c.muted)],
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_left, size: 20, color: c.muted),
+              ],
             ],
           ),
         ),
@@ -255,7 +331,9 @@ class StatGrid extends StatelessWidget {
         return Wrap(
           spacing: gap,
           runSpacing: gap,
-          children: [for (final c in children) SizedBox(width: width, child: c)],
+          children: [
+            for (final c in children) SizedBox(width: width, child: c),
+          ],
         );
       },
     );
@@ -263,7 +341,14 @@ class StatGrid extends StatelessWidget {
 }
 
 class StatCard extends StatelessWidget {
-  const StatCard({super.key, required this.label, required this.value, this.hint, this.valueColor, this.hintColor});
+  const StatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    this.hint,
+    this.valueColor,
+    this.hintColor,
+  });
 
   final String label;
   final String value;
@@ -287,7 +372,11 @@ class StatCard extends StatelessWidget {
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 value,
-                style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: valueColor),
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: valueColor,
+                ),
               ),
             ),
             if (hint != null)
@@ -306,7 +395,12 @@ class StatCard extends StatelessWidget {
 
 /// Dark card for the money that matters most (treasury / a rep's cash box).
 class HighlightCard extends StatelessWidget {
-  const HighlightCard({super.key, required this.label, required this.value, this.lines = const []});
+  const HighlightCard({
+    super.key,
+    required this.label,
+    required this.value,
+    this.lines = const [],
+  });
 
   final String label;
   final String value;
@@ -327,11 +421,16 @@ class HighlightCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               value,
-              style: TextStyle(color: c.onHighlight, fontSize: 26, fontWeight: FontWeight.w800),
+              style: TextStyle(
+                color: c.onHighlight,
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             if (lines.isNotEmpty) ...[
               Divider(color: c.onHighlight.withValues(alpha: 0.2), height: 20),
-              for (final l in lines) Text(l, style: TextStyle(color: dim, fontSize: 13)),
+              for (final l in lines)
+                Text(l, style: TextStyle(color: dim, fontSize: 13)),
             ],
           ],
         ),
@@ -364,10 +463,16 @@ class InfoCard extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: 120,
-                      child: Text(label, style: TextStyle(color: c.muted, fontSize: 13.5)),
+                      child: Text(
+                        label,
+                        style: TextStyle(color: c.muted, fontSize: 13.5),
+                      ),
                     ),
                     Expanded(
-                      child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      child: Text(
+                        value,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
@@ -382,11 +487,21 @@ class InfoCard extends StatelessWidget {
 
 /// Screen title with a status badge and wrapped action buttons under it.
 class PageHeader extends StatelessWidget {
-  const PageHeader({super.key, required this.title, this.subtitle, this.badge, this.actions = const []});
+  const PageHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.badge,
+    this.trailing,
+    this.actions = const [],
+  });
 
   final String title;
   final String? subtitle;
   final Widget? badge;
+
+  /// Rendered opposite the title, on the same row (e.g. a single destructive action).
+  final Widget? trailing;
   final List<Widget> actions;
 
   @override
@@ -394,17 +509,33 @@ class PageHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        Row(
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-            ?badge,
+            Expanded(
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  ?badge,
+                ],
+              ),
+            ),
+            ?trailing,
           ],
         ),
-        if (subtitle != null) Text(subtitle!, style: TextStyle(color: context.colors.muted)),
-        if (actions.isNotEmpty) ...[const SizedBox(height: 12), Wrap(spacing: 8, runSpacing: 8, children: actions)],
+        if (subtitle != null)
+          Text(subtitle!, style: TextStyle(color: context.colors.muted)),
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: actions),
+        ],
       ],
     );
   }
@@ -433,7 +564,12 @@ class EmptyCard extends StatelessWidget {
 
 /// Horizontal filter chips (single choice). `null` value = "all".
 class ChoiceBar<T> extends StatelessWidget {
-  const ChoiceBar({super.key, required this.options, required this.value, required this.onChanged});
+  const ChoiceBar({
+    super.key,
+    required this.options,
+    required this.value,
+    required this.onChanged,
+  });
 
   final Map<T, String> options;
   final T value;
@@ -448,7 +584,11 @@ class ChoiceBar<T> extends StatelessWidget {
           for (final e in options.entries)
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 8),
-              child: ChoiceChip(label: Text(e.value), selected: e.key == value, onSelected: (_) => onChanged(e.key)),
+              child: ChoiceChip(
+                label: Text(e.value),
+                selected: e.key == value,
+                onSelected: (_) => onChanged(e.key),
+              ),
             ),
         ],
       ),

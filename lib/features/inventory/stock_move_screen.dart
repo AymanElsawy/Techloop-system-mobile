@@ -20,12 +20,23 @@ class _Line {
   final cost = TextEditingController();
 }
 
-typedef _Data = ({List<Warehouse> warehouses, List<Product> products, List<Supplier> suppliers});
+typedef _Data = ({
+  List<Warehouse> warehouses,
+  List<Product> products,
+  List<Supplier> suppliers,
+});
 
 /// Managers only. RECEIVE: goods bought from a supplier (with purchase price);
-/// ISSUE: warehouse → rep custody; RETURN: rep custody → warehouse.
+/// ISSUE: warehouse → rep custody; RETURN: rep custody → warehouse; TRANSFER: warehouse → another warehouse.
 class StockMoveScreen extends StatelessWidget {
-  const StockMoveScreen({super.key, required this.type, this.warehouseId, this.repId, this.productId, this.supplierId});
+  const StockMoveScreen({
+    super.key,
+    required this.type,
+    this.warehouseId,
+    this.repId,
+    this.productId,
+    this.supplierId,
+  });
 
   final String type;
   final String? warehouseId;
@@ -38,7 +49,9 @@ class StockMoveScreen extends StatelessWidget {
     final inv = context.app.inventory;
     final receive = type == 'RECEIVE';
     return Scaffold(
-      appBar: AppBar(title: Text(receive ? 'وارد من مورد' : movementTypeLabels[type]!)),
+      appBar: AppBar(
+        title: Text(receive ? 'وارد من مورد' : movementTypeLabels[type]!),
+      ),
       body: AsyncView<_Data>(
         refreshable: false,
         load: () async {
@@ -47,7 +60,13 @@ class StockMoveScreen extends StatelessWidget {
             receive ? inv.products(active: true) : Future.value(<Product>[]),
             receive ? inv.suppliers(active: true) : Future.value(<Supplier>[]),
           ).wait;
-          return (warehouses: w.where((x) => x.isActive || x.id == warehouseId).toList(), products: p, suppliers: s);
+          return (
+            warehouses: w
+                .where((x) => x.isActive || x.id == warehouseId)
+                .toList(),
+            products: p,
+            suppliers: s,
+          );
         },
         builder: (context, d) => _Form(screen: this, data: d),
       ),
@@ -68,12 +87,15 @@ class _Form extends StatefulWidget {
 class _FormState extends State<_Form> {
   late final s = widget.screen;
   late final bool _receive = s.type == 'RECEIVE';
+  late final bool _transfer = s.type == 'TRANSFER';
+  String? _toWarehouseId; // TRANSFER only
   late String? _warehouseId = s.warehouseId;
   late String? _repId = s.repId;
   late String? _supplierId = s.supplierId;
   WarehouseDetails? _details;
   bool _loadingDetails = false;
   final _lines = [_Line()];
+  final _paidAmount = TextEditingController();
   final _notes = TextEditingController();
   bool _saving = false;
   String? _error;
@@ -95,7 +117,8 @@ class _FormState extends State<_Form> {
       final d = await context.app.inventory.warehouse(id);
       if (mounted && id == _warehouseId) setState(() => _details = d);
     } catch (e) {
-      if (mounted) setState(() => _error = errorMessage(e, 'حدث خطأ أثناء تحميل المخزن.'));
+      if (mounted)
+        setState(() => _error = errorMessage(e, 'حدث خطأ أثناء تحميل المخزن.'));
     }
     if (mounted) setState(() => _loadingDetails = false);
   }
@@ -103,19 +126,35 @@ class _FormState extends State<_Form> {
   /// Products that can be picked, with the quantity available at the source.
   List<_Option> get _options {
     if (_receive) {
-      return [for (final p in widget.data.products) (id: p.id, label: p.label, available: null, lastCost: p.lastCost)];
+      return [
+        for (final p in widget.data.products)
+          (id: p.id, label: p.label, available: null, lastCost: p.lastCost),
+      ];
     }
     final d = _details;
     if (d == null) return [];
-    final rows = s.type == 'ISSUE' ? d.stock : (d.reps.where((r) => r.rep.id == _repId).firstOrNull?.custody ?? []);
-    return [for (final r in rows) (id: r.productId, label: r.label, available: r.quantity, lastCost: null)];
+    final rows = s.type == 'ISSUE' || _transfer
+        ? d.stock
+        : (d.reps.where((r) => r.rep.id == _repId).firstOrNull?.custody ?? []);
+    return [
+      for (final r in rows)
+        (
+          id: r.productId,
+          label: r.label,
+          available: r.quantity,
+          lastCost: null,
+        ),
+    ];
   }
 
   _Option? _option(String? id) => _options.where((o) => o.id == id).firstOrNull;
 
   /// Receipt: default the purchase price to the product's last one.
   void _defaultCost(_Line l) {
-    final last = widget.data.products.where((p) => p.id == l.productId).firstOrNull?.lastCost;
+    final last = widget.data.products
+        .where((p) => p.id == l.productId)
+        .firstOrNull
+        ?.lastCost;
     if (_receive && last != null && l.cost.text.isEmpty) l.cost.text = '$last';
   }
 
@@ -134,8 +173,19 @@ class _FormState extends State<_Form> {
     return a != null && _qty(l) > a ? a : null;
   }
 
+  num _grandTotal() =>
+      round2(_lines.fold<num>(0, (sum, l) => sum + _lineTotal(l)));
+
+  /// Empty means paid in full.
+  num _paid() => _paidAmount.text.trim().isEmpty
+      ? _grandTotal()
+      : num.tryParse(_paidAmount.text) ?? 0;
+  num _remainingDebt() => round2(_grandTotal() - _paid());
+  bool get _paidTooHigh => _receive && _paid() > _grandTotal();
+
   bool get _canSubmit =>
       _warehouseId != null &&
+      !_paidTooHigh &&
       _lines.every(
         (l) =>
             l.productId != null &&
@@ -143,7 +193,11 @@ class _FormState extends State<_Form> {
             _overBy(l) == null &&
             (!_receive || num.tryParse(l.cost.text) != null),
       ) &&
-      (_receive ? _supplierId != null : _repId != null);
+      (_receive
+          ? _supplierId != null
+          : _transfer
+          ? _toWarehouseId != null && _toWarehouseId != _warehouseId
+          : _repId != null);
 
   Future<void> _submit() async {
     if (!_canSubmit || _saving) return;
@@ -153,12 +207,19 @@ class _FormState extends State<_Form> {
     });
     try {
       await context.app.inventory.move(_warehouseId!, s.type, {
-        if (!_receive) 'repId': _repId,
+        if (!_receive && !_transfer) 'repId': _repId,
+        if (_transfer) 'toWarehouseId': _toWarehouseId,
         if (_receive) 'supplierId': _supplierId,
         'items': [
           for (final l in _lines)
-            {'productId': l.productId, 'quantity': _qty(l), if (_receive) 'unitCost': num.parse(l.cost.text)},
+            {
+              'productId': l.productId,
+              'quantity': _qty(l),
+              if (_receive) 'unitCost': num.parse(l.cost.text),
+            },
         ],
+        if (_receive && _paidAmount.text.trim().isNotEmpty)
+          'paidAmount': _paid(),
         'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       });
       if (!mounted) return;
@@ -176,7 +237,9 @@ class _FormState extends State<_Form> {
 
   /// Receipt: stock and prices now, and the average after saving (same weighted moving average as the backend).
   Widget? _costPreview(_Line l) {
-    final p = widget.data.products.where((p) => p.id == l.productId).firstOrNull;
+    final p = widget.data.products
+        .where((p) => p.id == l.productId)
+        .firstOrNull;
     if (p == null) return null;
     final oldQty = p.quantity < 0 ? 0 : p.quantity;
     final qty = _qty(l);
@@ -208,14 +271,17 @@ class _FormState extends State<_Form> {
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: colors.subtle, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+        color: colors.subtle,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 4,
         children: [
           cell('الكمية', '${number(oldQty)} ← ${number(oldQty + qty)}'),
-          cell('السعر القديم (متوسط)', m(avg)),
-          cell('آخر شراء', [m(p.lastCost), ?p.lastSupplier?.name].dotted()),
+          cell('متوسط سعر الشراء', m(avg)),
+          cell('سعر الشراء', [m(p.lastCost), ?p.lastSupplier?.name].dotted()),
           cell('المتوسط الجديد', m(newAvg), strong: true),
         ],
       ),
@@ -226,12 +292,14 @@ class _FormState extends State<_Form> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final options = _options;
-    final grandTotal = round2(_lines.fold<num>(0, (sum, l) => sum + _lineTotal(l)));
+    final grandTotal = _grandTotal();
     return PageList(
       children: [
         Text(switch (s.type) {
-          'RECEIVE' => 'بضاعة مشتراة تدخل المخزن. سعر الشراء بيحدّث متوسط سعر الصنف وآخر سعر شراء.',
+          'RECEIVE' =>
+            'بضاعة مشتراة تدخل المخزن. سعر الشراء بيحدّث متوسط سعر الصنف وآخر سعر شراء.',
           'ISSUE' => 'بضاعة تخرج من المخزن إلى عهدة المندوب.',
+          'TRANSFER' => 'بضاعة تتنقل من المخزن ده لمخزن تاني.',
           _ => 'بضاعة ترجع من عهدة المندوب إلى المخزن.',
         }, style: TextStyle(color: colors.muted)),
         FormCard(
@@ -258,6 +326,17 @@ class _FormState extends State<_Form> {
                 required: true,
                 onChanged: (v) => setState(() => _supplierId = v),
               )
+            else if (_transfer)
+              Select<String>(
+                label: 'إلى مخزن *',
+                value: _toWarehouseId,
+                hint: 'اختر المخزن',
+                items: {
+                  for (final w in widget.data.warehouses)
+                    if (w.id != _warehouseId && w.isActive) w.id: w.name,
+                },
+                onChanged: (v) => setState(() => _toWarehouseId = v),
+              )
             else if (_details != null) ...[
               Select<String>(
                 label: 'المندوب *',
@@ -270,7 +349,9 @@ class _FormState extends State<_Form> {
                 }),
               ),
               if (_details!.reps.isEmpty)
-                const Note('لا يوجد مناديب تابعين لهذا المخزن. اربط المندوب بالمخزن من صفحة المستخدمين.'),
+                const Note(
+                  'لا يوجد مناديب تابعين لهذا المخزن. اربط المندوب بالمخزن من صفحة المستخدمين.',
+                ),
             ],
             if (_loadingDetails) const LinearProgressIndicator(),
           ],
@@ -278,13 +359,21 @@ class _FormState extends State<_Form> {
         FormCard(
           title: 'الأصناف',
           children: [
-            if (!_receive && _details != null && options.isEmpty && (s.type == 'ISSUE' || _repId != null))
+            if (!_receive &&
+                _details != null &&
+                options.isEmpty &&
+                (s.type == 'ISSUE' || _transfer || _repId != null))
               Text(
-                s.type == 'ISSUE' ? 'المخزن فارغ.' : 'لا توجد بضاعة في عهدة هذا المندوب.',
+                s.type == 'ISSUE' || _transfer
+                    ? 'المخزن فارغ.'
+                    : 'لا توجد بضاعة في عهدة هذا المندوب.',
                 style: TextStyle(color: colors.muted),
               ),
             if (_receive && options.isEmpty)
-              Text('لا توجد أصناف نشطة. أضف صنف من تبويب الأصناف.', style: TextStyle(color: colors.muted)),
+              Text(
+                'لا توجد أصناف نشطة. أضف صنف من تبويب الأصناف.',
+                style: TextStyle(color: colors.muted),
+              ),
             for (final (i, l) in _lines.indexed)
               Container(
                 padding: const EdgeInsets.all(10),
@@ -305,8 +394,12 @@ class _FormState extends State<_Form> {
                             // Products already chosen in other lines are hidden.
                             items: {
                               for (final o in options)
-                                if (o.id == l.productId || !_lines.any((x) => x != l && x.productId == o.id))
-                                  o.id: '${o.label}${o.available == null ? '' : ' — المتاح ${number(o.available!)}'}',
+                                if (o.id == l.productId ||
+                                    !_lines.any(
+                                      (x) => x != l && x.productId == o.id,
+                                    ))
+                                  o.id:
+                                      '${o.label}${o.available == null ? '' : ' — المتاح ${number(o.available!)}'}',
                             },
                             onChanged: (v) => setState(() {
                               l.productId = v;
@@ -318,7 +411,10 @@ class _FormState extends State<_Form> {
                           IconButton(
                             tooltip: 'حذف السطر ${i + 1}',
                             onPressed: () => setState(() => _lines.removeAt(i)),
-                            icon: Icon(Icons.delete_outline, color: colors.danger),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: colors.danger,
+                            ),
                           ),
                       ],
                     ),
@@ -350,11 +446,17 @@ class _FormState extends State<_Form> {
                     ),
                     if (_receive) ...[
                       const SizedBox(height: 6),
-                      Text('الإجمالي: ${money(_lineTotal(l))}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                      Text(
+                        'الإجمالي: ${money(_lineTotal(l))}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       ?_costPreview(l),
                     ],
                     if (_overBy(l) != null)
-                      Text('المتاح ${number(_overBy(l)!)} فقط.', style: TextStyle(color: colors.danger, fontSize: 12)),
+                      Text(
+                        'المتاح ${number(_overBy(l)!)} فقط.',
+                        style: TextStyle(color: colors.danger, fontSize: 12),
+                      ),
                   ],
                 ),
               ),
@@ -367,15 +469,58 @@ class _FormState extends State<_Form> {
                 ),
                 const Spacer(),
                 if (_receive)
-                  Text('إجمالي الفاتورة: ${money(grandTotal)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Text(
+                    'إجمالي الفاتورة: ${money(grandTotal)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
               ],
             ),
             if (_receive && _lines.any((l) => l.cost.text.isEmpty))
-              Text('اكتب سعر الشراء لكل صنف.', style: TextStyle(color: colors.warningFg, fontSize: 12)),
+              Text(
+                'اكتب سعر الشراء لكل صنف.',
+                style: TextStyle(color: colors.warningFg, fontSize: 12),
+              ),
           ],
         ),
+        if (_receive)
+          FormCard(
+            children: [
+              Input(
+                label: 'المدفوع الآن للمورد',
+                controller: _paidAmount,
+                keyboard: Input.decimal,
+                ltr: true,
+                hint:
+                    'الإجمالي (${money(grandTotal)}) — سيب الحقل فاضي لو مدفوع بالكامل',
+                onChanged: (_) => setState(() {}),
+              ),
+              if (_paidTooHigh)
+                Text(
+                  'المدفوع أكبر من إجمالي الفاتورة.',
+                  style: TextStyle(color: colors.danger, fontSize: 12),
+                )
+              else if (_remainingDebt() > 0)
+                Text(
+                  'الباقي دين على الشركة عند المورد: ${money(_remainingDebt())}',
+                  style: TextStyle(
+                    color: colors.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
         FormCard(
-          children: [Input(label: 'ملاحظات', controller: _notes, hint: _receive ? 'رقم فاتورة المورد' : 'رقم الإذن')],
+          children: [
+            Input(
+              label: 'ملاحظات',
+              controller: _notes,
+              hint: _receive
+                  ? 'رقم فاتورة المورد'
+                  : _transfer
+                  ? 'سبب التحويل'
+                  : 'رقم الإذن',
+            ),
+          ],
         ),
         SubmitButton(
           label: 'حفظ ${_receive ? 'الوارد' : movementTypeLabels[s.type]}',

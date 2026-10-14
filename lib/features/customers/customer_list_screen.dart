@@ -7,7 +7,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/models/common.dart';
 import '../../data/models/customer.dart';
-import '../../widgets/async_view.dart';
+import '../../widgets/paged_list.dart';
 import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
 import 'customer_details_screen.dart';
@@ -23,7 +23,7 @@ class CustomerListScreen extends StatefulWidget {
 
 class _CustomerListScreenState extends State<CustomerListScreen> {
   final _search = TextEditingController();
-  final _list = AsyncController<List<Customer>>();
+  final _list = PagedController();
   Timer? _debounce;
   String _query = '';
   String? _governorate;
@@ -46,17 +46,25 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   Future<void> _loadPending() async {
     if (!context.isManager) return;
     try {
-      final list = await context.app.customers.list(status: 'PENDING');
-      if (mounted) setState(() => _pending = list.length);
+      final page = await context.app.customers.page(
+        1,
+        limit: 1,
+        status: 'PENDING',
+      );
+      if (mounted) setState(() => _pending = page.total);
     } catch (_) {} // the shortcut is optional
   }
 
   void _onSearch(String v) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () => setState(() => _query = v.trim()));
+    _debounce = Timer(
+      const Duration(milliseconds: 300),
+      () => setState(() => _query = v.trim()),
+    );
   }
 
-  bool get _hasFilters => _query.isNotEmpty || _governorate != null || _status != null;
+  bool get _hasFilters =>
+      _query.isNotEmpty || _governorate != null || _status != null;
 
   Future<void> _open(Widget screen) async {
     await push(context, screen);
@@ -85,10 +93,15 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!manager && regions.isEmpty) ...[
-                  const Note('لم يتم تحديد منطقة (محافظات) لك بعد، لذلك لا يظهر أي عميل. تواصل مع الإدارة.'),
+                  const Note(
+                    'لم يتم تحديد منطقة (محافظات) لك بعد، لذلك لا يظهر أي عميل. تواصل مع الإدارة.',
+                  ),
                   const SizedBox(height: 10),
                 ] else if (!manager) ...[
-                  Text('منطقتك: ${regions.join('، ')}', style: TextStyle(color: context.colors.muted, fontSize: 13)),
+                  Text(
+                    'منطقتك: ${regions.join('، ')}',
+                    style: TextStyle(color: context.colors.muted, fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
                 ],
                 Row(
@@ -121,7 +134,8 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                   ChoiceBar<String?>(
                     options: {
                       null: 'كل الحالات',
-                      'PENDING': 'بانتظار الموافقة${_pending > 0 ? ' ($_pending)' : ''}',
+                      'PENDING':
+                          'بانتظار الموافقة${_pending > 0 ? ' ($_pending)' : ''}',
                       'APPROVED': 'معتمد',
                       'REJECTED': 'مرفوض',
                     },
@@ -133,23 +147,23 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             ),
           ),
           Expanded(
-            child: AsyncView<List<Customer>>(
+            child: PagedListView<Customer>(
               key: ValueKey((_query, _governorate, _status)),
               controller: _list,
-              load: () => context.app.customers.list(governorate: _governorate, status: _status, search: _query),
+              load: (page) => context.app.customers.page(
+                page,
+                governorate: _governorate,
+                status: _status,
+                search: _query,
+              ),
               errorText: 'حدث خطأ أثناء تحميل العملاء.',
-              builder: (context, customers) => customers.isEmpty
-                  ? PageList(children: [EmptyCard(_hasFilters ? 'لا يوجد عملاء مطابقون للبحث.' : 'لا يوجد عملاء بعد.')])
-                  : ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                      itemCount: customers.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) => _CustomerCard(
-                        customer: customers[i],
-                        onTap: () => _open(CustomerDetailsScreen(id: customers[i].id)),
-                      ),
-                    ),
+              emptyText: _hasFilters
+                  ? 'لا يوجد عملاء مطابقون للبحث.'
+                  : 'لا يوجد عملاء بعد.',
+              itemBuilder: (context, c) => _CustomerCard(
+                customer: c,
+                onTap: () => _open(CustomerDetailsScreen(id: c.id)),
+              ),
             ),
           ),
         ],
@@ -174,7 +188,10 @@ class _CustomerCard extends StatelessWidget {
         subtitle: [c.place, if (c.phone != null) c.phone!].dotted(),
         badge: c.status == 'APPROVED'
             ? null
-            : StatusBadge(customerStatusLabels[c.status]!, tone: statusTones[c.status]!),
+            : StatusBadge(
+                customerStatusLabels[c.status]!,
+                tone: statusTones[c.status]!,
+              ),
         trailing: money(c.debit),
         trailingColor: c.debit > 0 ? context.colors.danger : null,
         trailingHint: c.credit > 0 ? 'دائن ${money(c.credit)}' : 'مدين',

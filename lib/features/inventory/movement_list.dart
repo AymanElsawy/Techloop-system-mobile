@@ -5,6 +5,7 @@ import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/models/inventory.dart';
 import '../../widgets/async_view.dart';
+import '../../widgets/paged_list.dart';
 import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
 import '../documents/document_pdf_screen.dart';
@@ -43,7 +44,8 @@ class _MovementListState extends State<MovementList> {
     super.initState();
     if (context.isManager) {
       context.app.inventory.warehouses().then((list) {
-        if (mounted) setState(() => _warehouses = {for (final w in list) w.id: w.name});
+        if (mounted)
+          setState(() => _warehouses = {for (final w in list) w.id: w.name});
       }, onError: (_) {});
     }
   }
@@ -82,22 +84,24 @@ class _MovementListState extends State<MovementList> {
         if (manager && _rep != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: InputChip(label: const Text('حركات مندوب واحد'), onDeleted: () => setState(() => _rep = null)),
+            child: InputChip(
+              label: const Text('حركات مندوب واحد'),
+              onDeleted: () => setState(() => _rep = null),
+            ),
           ),
         Expanded(
-          child: AsyncView<List<Movement>>(
+          child: PagedListView<Movement>(
             key: ValueKey((_warehouse, _rep, _type)),
-            load: () => context.app.inventory.movements(warehouseId: _warehouse, repId: _rep, type: _type),
+            load: (page) => context.app.inventory.movementsPage(
+              page,
+              warehouseId: _warehouse,
+              repId: _rep,
+              type: _type,
+            ),
             errorText: 'حدث خطأ أثناء تحميل الحركات.',
-            builder: (context, list) => list.isEmpty
-                ? const PageList(children: [EmptyCard('لا توجد حركات.')])
-                : ListView.separated(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                    itemCount: list.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, i) => MovementCard(movement: list[i]),
-                  ),
+            emptyText: 'لا توجد حركات.',
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            itemBuilder: (context, m) => MovementCard(movement: m),
           ),
         ),
       ],
@@ -124,14 +128,20 @@ class MovementCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                StatusBadge(movementTypeLabels[m.type] ?? m.type, tone: _typeTones[m.type] ?? Tone.neutral),
+                StatusBadge(
+                  movementTypeLabels[m.type] ?? m.type,
+                  tone: _typeTones[m.type] ?? Tone.neutral,
+                ),
                 const Spacer(),
                 Text(dateTime(m.createdAt), style: small),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              [m.warehouse?.name ?? '—', ?m.rep?.name].dotted(),
+              [
+                '${m.warehouse?.name ?? '—'}${m.toWarehouse == null ? '' : ' ← ${m.toWarehouse!.name}'}',
+                ?m.rep?.name,
+              ].dotted(),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             for (final i in m.items)
@@ -140,13 +150,16 @@ class MovementCard extends StatelessWidget {
                   children: [
                     TextSpan(text: '${i.name}: '),
                     TextSpan(
-                      text: number(i.quantity),
+                      text:
+                          '${m.type == 'ADJUST' && i.quantity > 0 ? '+' : ''}${number(i.quantity)}',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    if (manager && i.unitCost != null) TextSpan(text: ' × ${money(i.unitCost!)}', style: small),
+                    if (manager && i.unitCost != null)
+                      TextSpan(text: ' × ${money(i.unitCost!)}', style: small),
                     if (i.fromCustody > 0 && i.fromCustody < i.quantity)
                       TextSpan(
-                        text: ' (${number(i.fromCustody)} عهدة + ${number(i.quantity - i.fromCustody)} مخزن)',
+                        text:
+                            ' (${number(i.fromCustody)} عهدة + ${number(i.quantity - i.fromCustody)} مخزن)',
                         style: small,
                       )
                     else if (i.fromCustody > 0)
@@ -161,17 +174,25 @@ class MovementCard extends StatelessWidget {
               children: [
                 if (m.supplier != null)
                   TextButton(
-                    onPressed: () => push(context, SupplierDetailsScreen(id: m.supplier!.id)),
+                    onPressed: () => push(
+                      context,
+                      SupplierDetailsScreen(id: m.supplier!.id),
+                    ),
                     child: Text('المورد: ${m.supplier!.name}'),
                   ),
                 if (m.invoice != null)
                   TextButton(
-                    onPressed: () => push(context, InvoiceDetailsScreen(id: m.invoice!.id)),
+                    onPressed: () =>
+                        push(context, InvoiceDetailsScreen(id: m.invoice!.id)),
                     child: Text('فاتورة ${m.invoice!.number}'),
                   ),
-                if (m.documentType != null)
+                // Custody papers are printed by the warehouse side; a sales rep only sees the data.
+                if (m.documentType != null && context.canOperateWarehouses)
                   TextButton.icon(
-                    onPressed: () => push(context, DocumentPdfScreen(type: m.documentType!, id: m.id)),
+                    onPressed: () => push(
+                      context,
+                      DocumentPdfScreen(type: m.documentType!, id: m.id),
+                    ),
                     icon: const Icon(Icons.print_outlined, size: 18),
                     label: const Text('طباعة'),
                   ),
@@ -179,6 +200,25 @@ class MovementCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One movement, e.g. what was issued to a rep (opened from its notification).
+class MovementDetailsScreen extends StatelessWidget {
+  const MovementDetailsScreen({super.key, required this.id});
+
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('تفاصيل الحركة')),
+      body: AsyncView<Movement>(
+        load: () => context.app.inventory.movement(id),
+        builder: (context, m) =>
+            PageList(children: [MovementCard(movement: m)]),
       ),
     );
   }

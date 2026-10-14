@@ -33,7 +33,9 @@ class _ReturnDetailsScreenState extends State<ReturnDetailsScreen> {
             PageHeader(
               title: 'فاتورة مرتجع رقم ${r.number}',
               subtitle: r.customer.name,
-              badge: r.cancelled ? const StatusBadge('ملغاة', tone: Tone.danger) : null,
+              badge: r.cancelled
+                  ? const StatusBadge('ملغاة', tone: Tone.danger)
+                  : null,
               actions: [
                 PrintButton(type: 'SALE_RETURN', id: r.id),
                 if (context.isManager && !r.cancelled)
@@ -53,7 +55,13 @@ class _ReturnDetailsScreenState extends State<ReturnDetailsScreen> {
                   ),
               ],
             ),
-            if (r.cancelled) CancelledNote(by: r.cancelledBy, at: r.cancelledAt, reason: r.cancelReason, verb: 'ألغاه'),
+            if (r.cancelled)
+              CancelledNote(
+                by: r.cancelledBy,
+                at: r.cancelledAt,
+                reason: r.cancelReason,
+                verb: 'ألغاه',
+              ),
             InfoCard(
               items: [
                 ('من فاتورة بيع', r.invoiceNumber),
@@ -65,7 +73,8 @@ class _ReturnDetailsScreenState extends State<ReturnDetailsScreen> {
               footer: Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
-                  onPressed: () => push(context, InvoiceDetailsScreen(id: r.invoiceId)),
+                  onPressed: () =>
+                      push(context, InvoiceDetailsScreen(id: r.invoiceId)),
                   child: const Text('فاتورة البيع'),
                 ),
               ),

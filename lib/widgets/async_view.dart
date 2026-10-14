@@ -71,16 +71,23 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
         final Widget child;
         if (snap.hasError && snap.connectionState == ConnectionState.done) {
           child = ErrorState(
-            message: snap.error is ApiException ? '${snap.error}' : widget.errorText,
+            message: snap.error is ApiException
+                ? '${snap.error}'
+                : widget.errorText,
             onRetry: _refresh,
           );
         } else if (data != null) {
           final body = widget.builder(context, data as T);
-          child = widget.refreshable ? RefreshIndicator(onRefresh: _refresh, child: body) : body;
+          child = widget.refreshable
+              ? RefreshIndicator(onRefresh: _refresh, child: body)
+              : body;
         } else {
           child = const Center(child: CircularProgressIndicator());
         }
-        return AnimatedSwitcher(duration: const Duration(milliseconds: 200), child: child);
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: child,
+        );
       },
     );
   }
@@ -100,11 +107,18 @@ class ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_outlined, size: 48, color: context.colors.muted),
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 48,
+              color: context.colors.muted,
+            ),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            OutlinedButton(onPressed: onRetry, child: const Text('إعادة المحاولة')),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: const Text('إعادة المحاولة'),
+            ),
           ],
         ),
       ),

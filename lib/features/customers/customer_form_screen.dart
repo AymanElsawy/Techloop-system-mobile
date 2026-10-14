@@ -51,6 +51,15 @@ class _FormState extends State<_Form> {
   late final _city = TextEditingController(text: c?.city);
   late final _address = TextEditingController(text: c?.address);
   late final _notes = TextEditingController(text: c?.notes);
+  late final _creditLimit = TextEditingController(
+    text: c?.creditLimit == null ? '' : '${c!.creditLimit}',
+  );
+  late final _terms = TextEditingController(
+    text: c?.paymentTermDays == null ? '' : '${c!.paymentTermDays}',
+  );
+  late final _discount = TextEditingController(
+    text: c?.discountPercent == null ? '' : '${c!.discountPercent}',
+  );
   late String _type = c?.type ?? 'CLINIC';
   late String? _governorate = c?.governorate;
   late GeoPoint? _location = c?.location;
@@ -63,7 +72,9 @@ class _FormState extends State<_Form> {
 
   /// Reps editing someone else's (or an approved) customer: contact details only.
   late final bool _contactOnly =
-      c != null && !_manager && !(c!.status == 'PENDING' && c!.createdBy?.id == context.user.id);
+      c != null &&
+      !_manager &&
+      !(c!.status == 'PENDING' && c!.createdBy?.id == context.user.id);
 
   Future<void> _locate() async {
     setState(() {
@@ -91,12 +102,29 @@ class _FormState extends State<_Form> {
       'city': _city.text.trim(),
       'address': _address.text.trim(),
       'notes': _notes.text.trim(),
-      'location': _location == null ? null : {'latitude': _location!.latitude, 'longitude': _location!.longitude},
+      'location': _location == null
+          ? null
+          : {
+              'latitude': _location!.latitude,
+              'longitude': _location!.longitude,
+            },
     };
-    final all = {...contact, 'name': _name.text.trim(), 'type': _type, 'governorate': _governorate};
+    final all = {
+      ...contact,
+      'name': _name.text.trim(),
+      'type': _type,
+      'governorate': _governorate,
+      if (_manager) ...{
+        'creditLimit': parseAmount(_creditLimit.text), // empty = no limit
+        'paymentTermDays': int.tryParse(_terms.text.trim()), // empty = no terms
+        'discountPercent': parseAmount(_discount.text), // empty = none
+      },
+    };
     final repo = context.app.customers;
     try {
-      final saved = c == null ? await repo.create(all) : await repo.update(c!.id, _contactOnly ? contact : all);
+      final saved = c == null
+          ? await repo.create(all)
+          : await repo.update(c!.id, _contactOnly ? contact : all);
       if (!mounted) return;
       if (c == null) {
         replace(context, CustomerDetailsScreen(id: saved.id));
@@ -121,22 +149,30 @@ class _FormState extends State<_Form> {
       child: PageList(
         children: [
           if (!_manager && c == null)
-            const Note('سيظهر العميل بانتظار موافقة الإدارة، ويمكنك جدولة زيارات له في هذه الأثناء.'),
+            const Note(
+              'سيظهر العميل بانتظار موافقة الإدارة، ويمكنك جدولة زيارات له في هذه الأثناء.',
+            ),
           if (_contactOnly)
-            const Note('يمكنك تعديل بيانات التواصل والعنوان فقط. الاسم والنوع والمحافظة تعدلها الإدارة.'),
+            const Note(
+              'يمكنك تعديل بيانات التواصل والعنوان فقط. الاسم والنوع والمحافظة تعدلها الإدارة.',
+            ),
           FormCard(
             children: [
               Input(
                 label: 'اسم العميل *',
                 controller: _name,
                 enabled: !_contactOnly,
-                validator: (v) => v.trim().length < 2 ? 'اسم العميل مطلوب (حرفان على الأقل).' : null,
+                validator: (v) => v.trim().length < 2
+                    ? 'اسم العميل مطلوب (حرفان على الأقل).'
+                    : null,
               ),
               Select<String>(
                 label: 'نوع العميل',
                 value: _type,
                 items: customerTypeLabels,
-                onChanged: _contactOnly ? null : (v) => setState(() => _type = v!),
+                onChanged: _contactOnly
+                    ? null
+                    : (v) => setState(() => _type = v!),
               ),
               Input(
                 label: 'الهاتف',
@@ -144,7 +180,10 @@ class _FormState extends State<_Form> {
                 keyboard: TextInputType.phone,
                 ltr: true,
                 validator: (v) =>
-                    v.trim().isEmpty || RegExp(r'^\+?[0-9 ]{6,20}$').hasMatch(v.trim()) ? null : 'رقم الهاتف غير صحيح.',
+                    v.trim().isEmpty ||
+                        RegExp(r'^\+?[0-9 ]{6,20}$').hasMatch(v.trim())
+                    ? null
+                    : 'رقم الهاتف غير صحيح.',
               ),
               Input(label: 'الشخص المسؤول', controller: _contact),
             ],
@@ -160,7 +199,9 @@ class _FormState extends State<_Form> {
                 items: {
                   for (final g in {...regions, ?c?.governorate}) g: g,
                 },
-                onChanged: _contactOnly ? null : (v) => setState(() => _governorate = v),
+                onChanged: _contactOnly
+                    ? null
+                    : (v) => setState(() => _governorate = v),
                 validator: (v) => v == null ? 'المحافظة مطلوبة.' : null,
               ),
               Input(label: 'المدينة', controller: _city),
@@ -183,17 +224,70 @@ class _FormState extends State<_Form> {
                   ),
                   if (_location != null) ...[
                     const StatusBadge('تم تحديد الموقع', tone: Tone.success),
-                    TextButton(onPressed: () => setState(() => _location = null), child: const Text('إزالة')),
+                    TextButton(
+                      onPressed: () => setState(() => _location = null),
+                      child: const Text('إزالة'),
+                    ),
                   ],
                 ],
               ),
-              if (_locationError) const Note('تعذر تحديد الموقع. تأكد من السماح بالوصول للموقع.', tone: Tone.danger),
+              if (_locationError)
+                const Note(
+                  'تعذر تحديد الموقع. تأكد من السماح بالوصول للموقع.',
+                  tone: Tone.danger,
+                ),
             ],
           ),
           FormCard(
-            children: [Input(label: 'ملاحظات', controller: _notes, maxLines: 3)],
+            children: [
+              Input(label: 'ملاحظات', controller: _notes, maxLines: 3),
+            ],
           ),
-          SubmitButton(label: c == null ? 'إضافة العميل' : 'حفظ التعديلات', loading: _saving, onPressed: _submit),
+          if (_manager)
+            FormCard(
+              children: [
+                Input(
+                  label: 'حد الائتمان (ج.م)',
+                  controller: _creditLimit,
+                  keyboard: Input.decimal,
+                  ltr: true,
+                  hint: 'بدون حد',
+                  helper:
+                      'أقصى مديونية يقدر المندوب يبيع لحدها. سيبه فاضي لو مفيش حد.',
+                ),
+                Input(
+                  label: 'مدة السداد (يوم)',
+                  controller: _terms,
+                  keyboard: TextInputType.number,
+                  ltr: true,
+                  hint: 'بدون',
+                  helper:
+                      'الفاتورة الآجلة تستحق بعدها. بعد الميعاد المندوب ميقدرش يبيعله آجل.',
+                  validator: (v) =>
+                      v.trim().isEmpty || (int.tryParse(v) ?? 999) <= 365
+                      ? null
+                      : 'أقصى 365 يوم.',
+                ),
+                Input(
+                  label: 'نسبة الخصم %',
+                  controller: _discount,
+                  keyboard: Input.decimal,
+                  ltr: true,
+                  hint: 'بدون',
+                  helper:
+                      'خصم تلقائي على فواتيره، وأقصى خصم يقدر المندوب يديه.',
+                  validator: (v) =>
+                      v.trim().isEmpty || (parseAmount(v) ?? 999) <= 100
+                      ? null
+                      : 'أقصى 100%.',
+                ),
+              ],
+            ),
+          SubmitButton(
+            label: c == null ? 'إضافة العميل' : 'حفظ التعديلات',
+            loading: _saving,
+            onPressed: _submit,
+          ),
           if (_error != null) Note(_error!, tone: Tone.danger),
         ],
       ),

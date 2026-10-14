@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/api.dart';
 import '../../core/app_scope.dart';
+import '../../core/format.dart';
+import '../../core/session.dart';
 import '../../data/models/treasury.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/form.dart';
@@ -72,8 +74,17 @@ class _FormState extends State<_Form> {
         const Text('بتتطبع في رأس وذيل كل فاتورة وإيصال.'),
         FormCard(
           children: [
-            Input(label: 'اسم الشركة *', controller: _name, onChanged: (_) => setState(() {})),
-            Input(label: 'التليفون', controller: _phone, keyboard: TextInputType.phone, ltr: true),
+            Input(
+              label: 'اسم الشركة *',
+              controller: _name,
+              onChanged: (_) => setState(() {}),
+            ),
+            Input(
+              label: 'التليفون',
+              controller: _phone,
+              keyboard: TextInputType.phone,
+              ltr: true,
+            ),
             Input(label: 'العنوان', controller: _address),
             Input(label: 'الرقم الضريبي', controller: _tax, ltr: true),
             Input(label: 'السجل التجاري', controller: _cr, ltr: true),
@@ -85,9 +96,70 @@ class _FormState extends State<_Form> {
             ),
           ],
         ),
-        if (_message != null) Note(_message!.$2, tone: _message!.$1 ? Tone.success : Tone.danger),
-        SubmitButton(label: 'حفظ', loading: _saving, onPressed: _name.text.trim().length < 2 ? null : _save),
+        if (_message != null)
+          Note(_message!.$2, tone: _message!.$1 ? Tone.success : Tone.danger),
+        SubmitButton(
+          label: 'حفظ',
+          loading: _saving,
+          onPressed: _name.text.trim().length < 2 ? null : _save,
+        ),
+        if (context.user.role == UserRole.owner) const _Backups(),
       ],
+    );
+  }
+}
+
+/// Daily automatic backups (database + attachments). Owner only; downloading is on the web.
+class _Backups extends StatefulWidget {
+  const _Backups();
+
+  @override
+  State<_Backups> createState() => _BackupsState();
+}
+
+class _BackupsState extends State<_Backups> {
+  final _ctl = AsyncController<List<Backup>>();
+  bool _running = false;
+
+  Future<void> _backupNow() async {
+    setState(() => _running = true);
+    try {
+      await context.app.documents.createBackup();
+      await _ctl.reload();
+    } catch (e) {
+      if (mounted)
+        toast(
+          context,
+          errorMessage(
+            e,
+            'تعذر عمل النسخة. اتأكد إن mongodump متسطب على السيرفر.',
+          ),
+        );
+    }
+    if (mounted) setState(() => _running = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AsyncView<List<Backup>>(
+      controller: _ctl,
+      load: context.app.documents.backups,
+      refreshable: false,
+      builder: (context, list) => SectionCard(
+        title: 'النسخ الاحتياطي',
+        trailing: TextButton(
+          onPressed: _running ? null : _backupNow,
+          child: Text(_running ? 'جاري النسخ...' : 'نسخة الآن'),
+        ),
+        empty: 'لسه مفيش نسخ. بتتعمل نسخة كل يوم أوتوماتيك.',
+        children: [
+          for (final b in list)
+            Tile(
+              title: dateTime(b.createdAt),
+              trailing: '${(b.size / 1048576).toStringAsFixed(1)} MB',
+            ),
+        ],
+      ),
     );
   }
 }

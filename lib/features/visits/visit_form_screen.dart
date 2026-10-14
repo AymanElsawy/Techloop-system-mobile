@@ -94,7 +94,9 @@ class _FormState extends State<_Form> {
         ? widget.data.customers
         : rep == null
         ? <Customer>[]
-        : widget.data.customers.where((c) => rep.governorates.contains(c.governorate)).toList();
+        : widget.data.customers
+              .where((c) => rep.governorates.contains(c.governorate))
+              .toList();
 
     return PageList(
       children: [
@@ -106,15 +108,21 @@ class _FormState extends State<_Form> {
                 value: _repId,
                 hint: 'اختر المندوب',
                 items: {
-                  for (final r in widget.data.reps) r.id: '${r.name}${r.governorates.isEmpty ? ' (بدون منطقة)' : ''}',
+                  for (final r in widget.data.reps)
+                    r.id:
+                        '${r.name}${r.governorates.isEmpty ? ' (بدون منطقة)' : ''}',
                 },
                 onChanged: (v) => setState(() => _repId = v),
               ),
             Select<String>(
               label: 'العميل *',
-              value: customers.any((c) => c.id == _customerId) ? _customerId : null,
+              value: customers.any((c) => c.id == _customerId)
+                  ? _customerId
+                  : null,
               hint: 'اختر العميل',
-              items: {for (final c in customers) c.id: '${c.name} · ${c.governorate}'},
+              items: {
+                for (final c in customers) c.id: '${c.name} · ${c.governorate}',
+              },
               onChanged: (v) => setState(() => _customerId = v),
             ),
             if (manager)
@@ -122,7 +130,10 @@ class _FormState extends State<_Form> {
                 'تظهر عملاء محافظات المندوب المختار فقط.',
                 style: TextStyle(fontSize: 12, color: context.colors.muted),
               ),
-            Text('غرض الزيارة', style: TextStyle(color: context.colors.muted, fontSize: 13)),
+            Text(
+              'غرض الزيارة',
+              style: TextStyle(color: context.colors.muted, fontSize: 13),
+            ),
             Wrap(
               spacing: 8,
               children: [
@@ -145,7 +156,10 @@ class _FormState extends State<_Form> {
         SubmitButton(
           label: 'إنشاء الزيارة',
           loading: _saving,
-          onPressed: _customerId != null && customers.any((c) => c.id == _customerId) && (!manager || _repId != null)
+          onPressed:
+              _customerId != null &&
+                  customers.any((c) => c.id == _customerId) &&
+                  (!manager || _repId != null)
               ? _submit
               : null,
         ),

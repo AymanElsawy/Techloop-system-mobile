@@ -14,7 +14,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _form = GlobalKey<FormState>();
-  final _email = TextEditingController();
+  final _username = TextEditingController();
   final _password = TextEditingController();
   bool _hidden = true;
   bool _loading = false;
@@ -22,7 +22,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _email.dispose();
+    _username.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -34,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await widget.session.login(_email.text.trim(), _password.text);
+      await widget.session.login(_username.text.trim(), _password.text);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: theme.appBarTheme.backgroundColor,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -66,18 +66,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           Text(
                             'تسجيل الدخول',
                             textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           const SizedBox(height: 24),
                           TextFormField(
-                            controller: _email,
-                            keyboardType: TextInputType.emailAddress,
+                            controller: _username,
+                            keyboardType: TextInputType.visiblePassword,
+                            autocorrect: false,
                             textDirection: TextDirection.ltr,
-                            autofillHints: const [AutofillHints.email],
+                            autofillHints: const [AutofillHints.username],
                             textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(labelText: 'البريد الإلكتروني'),
-                            validator: (v) => v == null || !RegExp(r'^\S+@\S+\.\S+$').hasMatch(v.trim())
-                                ? 'اكتب بريد إلكتروني صحيح.'
+                            decoration: const InputDecoration(
+                              labelText: 'اسم الدخول',
+                            ),
+                            validator: (v) => (v ?? '').trim().isEmpty
+                                ? 'اسم الدخول مطلوب.'
                                 : null,
                           ),
                           const SizedBox(height: 16),
@@ -90,12 +95,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: InputDecoration(
                               labelText: 'كلمة المرور',
                               suffixIcon: IconButton(
-                                tooltip: _hidden ? 'إظهار كلمة المرور' : 'إخفاء كلمة المرور',
-                                icon: Icon(_hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                                onPressed: () => setState(() => _hidden = !_hidden),
+                                tooltip: _hidden
+                                    ? 'إظهار كلمة المرور'
+                                    : 'إخفاء كلمة المرور',
+                                icon: Icon(
+                                  _hidden
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _hidden = !_hidden),
                               ),
                             ),
-                            validator: (v) => (v ?? '').length < 8 ? 'كلمة المرور 8 أحرف على الأقل.' : null,
+                            validator: (v) => (v ?? '').isEmpty
+                                ? 'كلمة المرور مطلوبة.'
+                                : null,
                           ),
                           if (_error != null) ...[
                             const SizedBox(height: 16),
@@ -111,7 +125,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: _loading
                                 ? const SizedBox.square(
                                     dimension: 22,
-                                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                    ),
                                   )
                                 : const Text('دخول'),
                           ),
@@ -135,18 +151,11 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Container(
-        width: 56,
-        height: 56,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Text(
-          'VP',
-          style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 22, fontWeight: FontWeight.w800),
-        ),
+      child: Image.asset(
+        'assets/icon/logo.png',
+        width: 140,
+        height: 140,
+        fit: BoxFit.contain,
       ),
     );
   }

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Colors from md-files/shared/03-design-tokens.md (light: yale-blue / stormy-teal / alabaster-grey,
-/// dark: prussian-blue / orange). Status colors: warning (apricot / orange), danger (coral / orange).
+/// Colors from md-files/shared/03-design-tokens.md (light: air-force-blue / bright-teal-blue / cornflower-ocean / red,
+/// dark: ink-black / deep-space-blue / blue-slate / eggshell). Status colors: warning (apricot / light-bronze), danger (coral / rosewood).
 @immutable
 class AppColors extends ThemeExtension<AppColors> {
   const AppColors({
@@ -47,52 +47,53 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color neutralFg;
 
   static const light = AppColors(
-    muted: Color(0xFF3C6E71),
-    border: Color(0xFFD3E7E8),
-    danger: Color(0xFFEA3528),
+    muted: Color(0xFF045D95),
+    border: Color(0xFFCFEDFC),
+    danger: Color(0xFFCC0000),
     warningBg: Color(0xFFFFF0E3),
     warningFg: Color(0xFFAD5503),
-    highlight: Color(0xFF284B63),
+    highlight: Color(0xFF233843),
     onHighlight: Colors.white,
-    chartSales: Color(0xFF284B63),
-    chartCollected: Color(0xFF3C6E71),
-    subtle: Color(0xFFF0F0F0),
-    successBg: Color(0xFFCADDE9),
-    successFg: Color(0xFF284B63),
-    dangerBg: Color(0xFFFCE2E0),
-    dangerFg: Color(0xFFBB1E12),
-    infoBg: Color(0xFFD3E7E8),
-    infoFg: Color(0xFF3C6E71),
-    neutralBg: Color(0xFFF0F0F0),
-    neutralFg: Color(0xFF2B2B2B),
+    chartSales: Color(0xFF233843),
+    chartCollected: Color(0xFF045D95),
+    subtle: Color(0xFFEEF4F6),
+    successBg: Color(0xFFDDE8EE),
+    successFg: Color(0xFF233843),
+    dangerBg: Color(0xFFFFE5E5),
+    dangerFg: Color(0xFFCC0000),
+    infoBg: Color(0xFFCFEDFC),
+    infoFg: Color(0xFF045D95),
+    neutralBg: Color(0xFFEEF4F6),
+    neutralFg: Color(0xFF111C22),
   );
 
   static const dark = AppColors(
-    muted: Color(0xFFB8B8B8),
-    border: Color(0xFF1F3158),
-    danger: Color(0xFFFDB541),
-    warningBg: Color(0xFF6B4201),
-    warningFg: Color(0xFFFEDAA0),
-    highlight: Color(0xFF101B31),
-    onHighlight: Color(0xFFE5E5E5),
-    chartSales: Color(0xFFE5E5E5),
-    chartCollected: Color(0xFFFCA311),
-    subtle: Color(0xFF0C1425),
-    successBg: Color(0xFF101B31),
-    successFg: Color(0xFFBECCEA),
-    dangerBg: Color(0xFF362101),
-    dangerFg: Color(0xFFFEC871),
-    infoBg: Color(0xFF1F3158),
-    infoFg: Color(0xFFB8B8B8),
-    neutralBg: Color(0xFF0C1425),
-    neutralFg: Color(0xFFFAFAFA),
+    muted: Color(0xFFABB9CD),
+    border: Color(0xFF31495E),
+    danger: Color(0xFFC38391),
+    warningBg: Color(0xFF7E3B17),
+    warningFg: Color(0xFFF4D3C2),
+    highlight: Color(0xFF31495E),
+    onHighlight: Color(0xFFF0EBD8),
+    chartSales: Color(0xFFF0EBD8),
+    chartCollected: Color(0xFF7D9EBA),
+    subtle: Color(0xFF0D1321),
+    successBg: Color(0xFF3E5C76),
+    successFg: Color(0xFFC5D3E6),
+    dangerBg: Color(0xFF261217),
+    dangerFg: Color(0xFFD2A1AB),
+    infoBg: Color(0xFF31495E),
+    infoFg: Color(0xFFABB9CD),
+    neutralBg: Color(0xFF0D1321),
+    neutralFg: Color(0xFFF0EBD8),
   );
 
   @override
   AppColors copyWith() => this;
 
   @override
-  AppColors lerp(ThemeExtension<AppColors>? other, double t) => t < 0.5 ? this : (other as AppColors? ?? this);
+  AppColors lerp(ThemeExtension<AppColors>? other, double t) =>
+      t < 0.5 ? this : (other as AppColors? ?? this);
 }
 
 extension AppColorsX on BuildContext {
@@ -101,28 +102,59 @@ extension AppColorsX on BuildContext {
 
 ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
-  final scheme = ColorScheme.fromSeed(seedColor: const Color(0xFF284B63), brightness: brightness).copyWith(
-    primary: dark ? const Color(0xFFFCA311) : const Color(0xFF3C6E71),
-    onPrimary: dark ? Colors.black : Colors.white,
-    surface: dark ? const Color(0xFF14213D) : Colors.white,
-    onSurface: dark ? const Color(0xFFE5E5E5) : const Color(0xFF353535),
-    error: dark ? const Color(0xFFFDB541) : const Color(0xFFEA3528),
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: const Color(0xFF233843),
+        brightness: brightness,
+      ).copyWith(
+        primary: dark ? const Color(0xFFF0EBD8) : const Color(0xFF045D95),
+        onPrimary: dark ? Colors.black : Colors.white,
+        // Tonal buttons and selected chips (M3 uses the containers, not primary).
+        primaryContainer: dark
+            ? const Color(0xFF3E5C76)
+            : const Color(0xFFCFEDFC),
+        onPrimaryContainer: dark
+            ? const Color(0xFFF0EBD8)
+            : const Color(0xFF033E63),
+        secondaryContainer: dark
+            ? const Color(0xFF3E5C76)
+            : const Color(0xFFDDE8EE),
+        onSecondaryContainer: dark
+            ? const Color(0xFFF0EBD8)
+            : const Color(0xFF233843),
+        surface: dark ? const Color(0xFF1D2D44) : Colors.white,
+        onSurface: dark ? const Color(0xFFF0EBD8) : const Color(0xFF111C22),
+        error: dark ? const Color(0xFFC38391) : const Color(0xFFCC0000),
+      );
   final colors = dark ? AppColors.dark : AppColors.light;
-  final base = ThemeData(colorScheme: scheme, brightness: brightness, useMaterial3: true);
+  final base = ThemeData(
+    colorScheme: scheme,
+    brightness: brightness,
+    useMaterial3: true,
+  );
 
   return base.copyWith(
-    scaffoldBackgroundColor: dark ? const Color(0xFF0C1425) : const Color(0xFFF0F0F0),
-    textTheme: GoogleFonts.cairoTextTheme(
-      base.textTheme,
-    ).apply(bodyColor: scheme.onSurface, displayColor: dark ? const Color(0xFFE5E5E5) : const Color(0xFF284B63)),
+    scaffoldBackgroundColor: dark
+        ? const Color(0xFF0D1321)
+        : const Color(0xFFEEF4F6),
+    textTheme: GoogleFonts.cairoTextTheme(base.textTheme).apply(
+      bodyColor: scheme.onSurface,
+      displayColor: dark ? const Color(0xFFF0EBD8) : const Color(0xFF233843),
+    ),
     appBarTheme: AppBarTheme(
-      backgroundColor: dark ? const Color(0xFF080D19) : const Color(0xFF284B63),
+      backgroundColor: dark ? const Color(0xFF080B14) : const Color(0xFF233843),
       foregroundColor: Colors.white,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white),
+      titleTextStyle: GoogleFonts.cairo(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+      ),
     ),
-    drawerTheme: DrawerThemeData(backgroundColor: dark ? const Color(0xFF080D19) : const Color(0xFF284B63)),
+    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+      backgroundColor: scheme.surface,
+      elevation: 0,
+    ),
     cardTheme: CardThemeData(
       color: scheme.surface,
       elevation: 0,
@@ -154,7 +186,8 @@ ThemeData buildTheme(Brightness brightness) {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(64, 46),
-        side: BorderSide(color: colors.border),
+        foregroundColor: scheme.primary,
+        side: BorderSide(color: scheme.primary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         textStyle: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 14),
       ),
@@ -162,6 +195,13 @@ ThemeData buildTheme(Brightness brightness) {
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: scheme.primary,
       foregroundColor: scheme.onPrimary,
+      elevation: 2,
+      highlightElevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      extendedTextStyle: GoogleFonts.cairo(
+        fontWeight: FontWeight.w700,
+        fontSize: 15,
+      ),
     ),
     extensions: [colors],
   );

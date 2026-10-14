@@ -12,7 +12,11 @@ import 'return_form_screen.dart';
 import 'sales_widgets.dart';
 
 class InvoiceDetailsScreen extends StatefulWidget {
-  const InvoiceDetailsScreen({super.key, required this.id, this.uploadFailed = false});
+  const InvoiceDetailsScreen({
+    super.key,
+    required this.id,
+    this.uploadFailed = false,
+  });
 
   final String id;
 
@@ -44,7 +48,10 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     final manager = context.isManager;
     return PageList(
       children: [
-        if (widget.uploadFailed) const Note('تم حفظ الفاتورة، لكن تعذر رفع المرفقات. ارفعها مرة أخرى من قسم المرفقات.'),
+        if (widget.uploadFailed)
+          const Note(
+            'تم حفظ الفاتورة، لكن تعذر رفع المرفقات. ارفعها مرة أخرى من قسم المرفقات.',
+          ),
         PageHeader(
           title: 'فاتورة رقم ${inv.invoiceNumber}',
           badge: inv.cancelled
@@ -57,7 +64,13 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
             if (!inv.cancelled)
               OutlinedButton(
                 onPressed: () async {
-                  await push(context, ReturnFormScreen(customerId: inv.customer.id, invoiceId: inv.id));
+                  await push(
+                    context,
+                    ReturnFormScreen(
+                      customerId: inv.customer.id,
+                      invoiceId: inv.id,
+                    ),
+                  );
                   _ctl.reload();
                 },
                 child: const Text('مرتجع من الفاتورة'),
@@ -69,7 +82,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                   final updated = await cancelWithReason(
                     context,
                     title: 'إلغاء الفاتورة',
-                    message: 'الإلغاء يرجع الكميات للمخزون ويحذف المبلغ من رصيد العميل.',
+                    message:
+                        'الإلغاء يرجع الكميات للمخزون ويحذف المبلغ من رصيد العميل.',
                     cancel: (r) => repo.cancelInvoice(inv.id, r),
                   );
                   if (updated != null) _ctl.set(updated);
@@ -78,7 +92,12 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
               ),
           ],
         ),
-        if (inv.cancelled) CancelledNote(by: inv.cancelledBy, at: inv.cancelledAt, reason: inv.cancelReason),
+        if (inv.cancelled)
+          CancelledNote(
+            by: inv.cancelledBy,
+            at: inv.cancelledAt,
+            reason: inv.cancelReason,
+          ),
         InfoCard(
           items: [
             ('العميل', inv.customer.name),
@@ -89,7 +108,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
           footer: Align(
             alignment: AlignmentDirectional.centerStart,
             child: TextButton(
-              onPressed: () => push(context, CustomerDetailsScreen(id: inv.customer.id)),
+              onPressed: () =>
+                  push(context, CustomerDetailsScreen(id: inv.customer.id)),
               child: const Text('صفحة العميل'),
             ),
           ),
@@ -97,7 +117,11 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         ItemsCard(items: inv.items),
         StatGrid(
           children: [
-            StatCard(label: 'إجمالي الفاتورة', value: money(inv.total)),
+            StatCard(
+              label: 'إجمالي الفاتورة',
+              value: money(inv.total),
+              hint: inv.discount > 0 ? 'بعد خصم ${money(inv.discount)}' : null,
+            ),
             StatCard(
               label: 'المدفوع · ${methodLabel(inv.paymentMethod)}',
               value: money(inv.paidAmount),
@@ -109,13 +133,28 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
               label: 'المتبقي',
               value: money(inv.remaining),
               valueColor: colors.danger,
-              hint: inv.previousDebtPaid > 0 ? '+ ${money(inv.previousDebtPaid)} دُفعت لسداد مديونية سابقة' : null,
+              hint: [
+                if (inv.previousDebtPaid > 0)
+                  '+ ${money(inv.previousDebtPaid)} دُفعت لسداد مديونية سابقة',
+                if (inv.dueDate != null && inv.remaining > 0)
+                  inv.dueDate!.isBefore(DateTime.now())
+                      ? 'متأخرة · كانت مستحقة ${shortDate(inv.dueDate!)}'
+                      : 'تستحق ${shortDate(inv.dueDate!)}',
+              ].join('\n').nullIfEmpty,
             ),
           ],
         ),
         if (inv.notes != null) InfoCard(items: [('ملاحظات', inv.notes!)]),
-        AttachmentsCard(base: '/invoices/${inv.id}', attachments: inv.attachments, onUploaded: _ctl.reload),
+        AttachmentsCard(
+          base: '/invoices/${inv.id}',
+          attachments: inv.attachments,
+          onUploaded: _ctl.reload,
+        ),
       ],
     );
   }
+}
+
+extension on String {
+  String? get nullIfEmpty => isEmpty ? null : this;
 }

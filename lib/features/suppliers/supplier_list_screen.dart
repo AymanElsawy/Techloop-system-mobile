@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_scope.dart';
 import '../../core/format.dart';
 import '../../data/models/inventory.dart';
-import '../../widgets/async_view.dart';
+import '../../widgets/paged_list.dart';
 import '../../widgets/ui.dart';
 import '../inventory/stock_move_screen.dart';
 import 'supplier_details_screen.dart';
@@ -20,7 +20,7 @@ class SupplierListScreen extends StatefulWidget {
 }
 
 class _SupplierListScreenState extends State<SupplierListScreen> {
-  final _ctl = AsyncController<List<Supplier>>();
+  final _ctl = PagedController();
   Timer? _debounce;
   String _query = '';
   bool? _active = true;
@@ -42,7 +42,10 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final repo = context.app.inventory;
-          final saved = await showSupplierForm(context, onSave: repo.createSupplier);
+          final saved = await showSupplierForm(
+            context,
+            onSave: repo.createSupplier,
+          );
           if (saved != null) _ctl.reload();
         },
         icon: const Icon(Icons.add),
@@ -65,20 +68,28 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
                         ),
                         onChanged: (v) {
                           _debounce?.cancel();
-                          _debounce = Timer(const Duration(milliseconds: 300), () => setState(() => _query = v.trim()));
+                          _debounce = Timer(
+                            const Duration(milliseconds: 300),
+                            () => setState(() => _query = v.trim()),
+                          );
                         },
                       ),
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(
-                      onPressed: () => _open(const StockMoveScreen(type: 'RECEIVE')),
+                      onPressed: () =>
+                          _open(const StockMoveScreen(type: 'RECEIVE')),
                       child: const Text('وارد جديد'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 ChoiceBar<bool?>(
-                  options: const {true: 'الموردين النشطين', false: 'الموقوفين', null: 'الكل'},
+                  options: const {
+                    true: 'الموردين النشطين',
+                    false: 'الموقوفين',
+                    null: 'الكل',
+                  },
                   value: _active,
                   onChanged: (v) => setState(() => _active = v),
                 ),
@@ -86,46 +97,40 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
             ),
           ),
           Expanded(
-            child: AsyncView<List<Supplier>>(
+            child: PagedListView<Supplier>(
               key: ValueKey((_query, _active)),
               controller: _ctl,
-              load: () => context.app.inventory.suppliers(search: _query, active: _active),
+              load: (page) => context.app.inventory.suppliersPage(
+                page,
+                search: _query,
+                active: _active,
+              ),
               errorText: 'حدث خطأ أثناء تحميل الموردين.',
-              builder: (context, list) => list.isEmpty
-                  ? PageList(
-                      children: [
-                        EmptyCard(
-                          _query.isNotEmpty || _active != true
-                              ? 'لا يوجد موردين مطابقين.'
-                              : 'لا يوجد موردين بعد. أضف أول مورد، أو من فورم الوارد مباشرة.',
-                        ),
-                      ],
-                    )
-                  : ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-                      itemCount: list.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) {
-                        final s = list[i];
-                        return Card(
-                          clipBehavior: Clip.antiAlias,
-                          child: Tile(
-                            title: s.name,
-                            subtitle: [
-                              ?s.company,
-                              ?s.phone,
-                              '${s.receipts} توريد',
-                              if (s.lastPurchaseAt != null) 'آخر توريد ${shortDate(s.lastPurchaseAt!)}',
-                            ].dotted(),
-                            dimmed: !s.isActive,
-                            badge: s.isActive ? null : const StatusBadge('موقوف', tone: Tone.danger),
-                            trailing: money(s.totalPurchases),
-                            onTap: () => _open(SupplierDetailsScreen(id: s.id)),
-                          ),
-                        );
-                      },
-                    ),
+              emptyText: _query.isNotEmpty || _active != true
+                  ? 'لا يوجد موردين مطابقين.'
+                  : 'لا يوجد موردين بعد. أضف أول مورد، أو من فورم الوارد مباشرة.',
+              itemBuilder: (context, s) {
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Tile(
+                    title: s.name,
+                    subtitle: [
+                      ?s.company,
+                      ?s.phone,
+                      '${s.receipts} توريد',
+                      if (s.lastPurchaseAt != null)
+                        'آخر توريد ${shortDate(s.lastPurchaseAt!)}',
+                      if (s.debt > 0) 'مديونية ${money(s.debt)}',
+                    ].dotted(),
+                    dimmed: !s.isActive,
+                    badge: s.isActive
+                        ? null
+                        : const StatusBadge('موقوف', tone: Tone.danger),
+                    trailing: money(s.totalPurchases),
+                    onTap: () => _open(SupplierDetailsScreen(id: s.id)),
+                  ),
+                );
+              },
             ),
           ),
         ],

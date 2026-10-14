@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/app_scope.dart';
+import '../../core/session.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/models/treasury.dart';
-import '../../widgets/async_view.dart';
+import '../../widgets/paged_list.dart';
 import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
 import '../sales/collection_details_screen.dart';
@@ -27,11 +28,11 @@ const _typeTones = {
 };
 
 /// App page with the full details of a document; movements have none (the PDF is their details).
-Widget? _detailsScreen(DocumentRow d) => switch (d.type) {
-  'SALE' => InvoiceDetailsScreen(id: d.id),
-  'COLLECTION' => CollectionDetailsScreen(id: d.id),
-  'SALE_RETURN' => ReturnDetailsScreen(id: d.id),
-  'DEPOSIT' => DepositDetailsScreen(id: d.id),
+Widget? documentDetailsScreen(String type, String id) => switch (type) {
+  'SALE' => InvoiceDetailsScreen(id: id),
+  'COLLECTION' => CollectionDetailsScreen(id: id),
+  'SALE_RETURN' => ReturnDetailsScreen(id: id),
+  'DEPOSIT' => DepositDetailsScreen(id: id),
   _ => null,
 };
 
@@ -71,44 +72,59 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'رقم المستند أو الاسم',
-                        prefixIcon: Icon(Icons.search),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        _debounce?.cancel();
-                        _debounce = Timer(const Duration(milliseconds: 300), () => setState(() => _query = v.trim()));
-                      },
-                    ),
-                  ),
-                  if (manager)
-                    IconButton(
-                      tooltip: 'بيانات الشركة على الفواتير',
-                      onPressed: () => push(context, const CompanyFormScreen()),
-                      icon: const Icon(Icons.business_outlined),
-                    ),
-                ],
+              TextField(
+                decoration: const InputDecoration(
+                  hintText: 'رقم المستند أو الاسم',
+                  prefixIcon: Icon(Icons.search),
+                  isDense: true,
+                ),
+                onChanged: (v) {
+                  _debounce?.cancel();
+                  _debounce = Timer(
+                    const Duration(milliseconds: 300),
+                    () => setState(() => _query = v.trim()),
+                  );
+                },
               ),
+              if (manager) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => push(context, const CompanyFormScreen()),
+                  icon: const Icon(Icons.business_outlined),
+                  // The owner also finds the backups there.
+                  label: Text(
+                    context.user.role == UserRole.owner
+                        ? 'بيانات الشركة والنسخ الاحتياطي'
+                        : 'بيانات الشركة على الفواتير',
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                    child: DateField(label: 'من', value: _from, onChanged: (d) => setState(() => _from = d)),
+                    child: DateField(
+                      label: 'من',
+                      value: _from,
+                      onChanged: (d) => setState(() => _from = d),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: DateField(label: 'إلى', value: _to, onChanged: (d) => setState(() => _to = d)),
+                    child: DateField(
+                      label: 'إلى',
+                      value: _to,
+                      onChanged: (d) => setState(() => _to = d),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               ChoiceBar<String?>(
-                options: {null: 'الكل', for (final t in types) t: documentTypeLabels[t]!},
+                options: {
+                  null: 'الكل',
+                  for (final t in types) t: documentTypeLabels[t]!,
+                },
                 value: _type,
                 onChanged: (v) => setState(() => _type = v),
               ),
@@ -116,35 +132,27 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
           ),
         ),
         Expanded(
-          child: AsyncView<List<DocumentRow>>(
+          child: PagedListView<DocumentRow>(
             key: ValueKey((_type, _from, _to, _query)),
-            load: () => context.app.documents.list(
+            load: (page) => context.app.documents.page(
+              page,
               type: _type,
               from: _from == null ? null : isoDay(_from!),
               to: _to == null ? null : isoDay(_to!),
               search: _query,
             ),
             errorText: 'حدث خطأ أثناء تحميل الفواتير.',
-            builder: (context, docs) {
-              final total = docs.where((d) => !d.cancelled).fold<num>(0, (s, d) => s + (d.amount ?? 0));
-              return docs.isEmpty
-                  ? const PageList(children: [EmptyCard('مفيش مستندات مطابقة.')])
-                  : ListView.separated(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                      itemCount: docs.length + 1,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) {
-                        if (i == docs.length) {
-                          return Text(
-                            '${docs.length} مستند${_type != null && total > 0 ? ' · الإجمالي (بدون الملغي): ${money(total)}' : ''}',
-                            style: TextStyle(color: context.colors.muted, fontSize: 13),
-                          );
-                        }
-                        return _DocumentCard(doc: docs[i]);
-                      },
-                    );
+            emptyText: 'مفيش مستندات مطابقة.',
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            // Totals cover every page (from the backend).
+            header: (context, last) {
+              final sum = last.sum ?? 0;
+              return Text(
+                '${last.total} مستند${_type != null && sum > 0 ? ' · الإجمالي (بدون الملغي): ${money(sum)}' : ''}',
+                style: TextStyle(color: context.colors.muted, fontSize: 13),
+              );
             },
+            itemBuilder: (context, d) => _DocumentCard(doc: d),
           ),
         ),
       ],
@@ -160,7 +168,7 @@ class _DocumentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final d = doc;
-    final details = _detailsScreen(d);
+    final details = documentDetailsScreen(d.type, d.id);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Tile(
@@ -174,9 +182,12 @@ class _DocumentCard extends StatelessWidget {
         badge: d.cancelled
             ? const StatusBadge('ملغاة', tone: Tone.danger)
             : StatusBadge(_short(d.type), tone: _typeTones[d.type]!),
-        trailing: d.amount != null ? money(d.amount!) : '${number(d.quantity ?? 0)} قطعة',
+        trailing: d.amount != null
+            ? money(d.amount!)
+            : '${number(d.quantity ?? 0)} قطعة',
         trailingHint: details == null ? 'PDF' : null,
-        onTap: () => push(context, details ?? DocumentPdfScreen(type: d.type, id: d.id)),
+        onTap: () =>
+            push(context, details ?? DocumentPdfScreen(type: d.type, id: d.id)),
       ),
     );
   }

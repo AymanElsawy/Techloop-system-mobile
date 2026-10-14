@@ -4,6 +4,7 @@ import '../../core/api.dart';
 import '../../core/app_scope.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
+import '../../data/models/common.dart';
 import '../../data/models/inventory.dart';
 import '../../data/repositories/sales_repository.dart';
 import '../../widgets/async_view.dart';
@@ -55,19 +56,40 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     final repo = context.app.sales;
     try {
       final invoice = await vm.submit(
-        vm.body(invoiceNumber: _number.text, chequeNumber: _cheque.text, notes: _notes.text),
+        vm.body(
+          invoiceNumber: _number.text,
+          chequeNumber: _cheque.text,
+          notes: _notes.text,
+        ),
       );
       final uploaded = await uploadAll(repo, '/invoices/${invoice.id}', {
         'RECEIPT': _receipt,
         if (vm.isCheque) 'CHEQUE': _chequeImage,
       });
       if (!mounted) return;
-      replace(context, InvoiceDetailsScreen(id: invoice.id, uploadFailed: !uploaded));
+      replace(
+        context,
+        InvoiceDetailsScreen(id: invoice.id, uploadFailed: !uploaded),
+      );
     } catch (e) {
       setState(
         () => _error = e is ApiException && e.status == 409
             ? 'رقم الفاتورة مستخدم من قبل.'
-            : e is ApiException && e.status == 400 && e.serverMessage.contains('previous debt')
+            : e is ApiException &&
+                  e.status == 400 &&
+                  e.serverMessage.contains('overdue')
+            ? 'العميل عليه متأخرات. حدّث الصفحة.'
+            : e is ApiException &&
+                  e.status == 400 &&
+                  e.serverMessage.contains('Discount above')
+            ? 'الخصم أكبر من المسموح.'
+            : e is ApiException &&
+                  e.status == 400 &&
+                  e.serverMessage.contains('Credit limit')
+            ? 'المديونية بعد الفاتورة أكبر من حد الائتمان. المديونية تغيرت، حدّث الصفحة وحاول مرة أخرى.'
+            : e is ApiException &&
+                  e.status == 400 &&
+                  e.serverMessage.contains('previous debt')
             ? 'المبلغ المدفوع أكبر من المسموح. المديونية تغيرت، حدّث الصفحة وحاول مرة أخرى.'
             : e is ApiException && e.serverMessage.contains('stock')
             ? 'الكمية غير متاحة في المخزون. حدّث الصفحة وحاول مرة أخرى.'
@@ -84,7 +106,13 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       showDragHandle: true,
       builder: (_) => _ProductPicker(products: options, vm: vm),
     );
-    if (chosen != null) vm.update(() => vm.lines[index].productId = chosen.id);
+    if (chosen != null) {
+      vm.update(
+        () => vm.lines[index]
+          ..productId = chosen.id
+          ..unitPrice = null,
+      );
+    }
   }
 
   @override
@@ -94,13 +122,21 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
       body: ListenableBuilder(
         listenable: vm,
         builder: (context, _) {
-          if (vm.loading) return const Center(child: CircularProgressIndicator());
+          if (vm.loading)
+            return const Center(child: CircularProgressIndicator());
           if (vm.loadError != null) {
-            return ErrorState(message: 'حدث خطأ أثناء تحميل البيانات.', onRetry: vm.load);
+            return ErrorState(
+              message: 'حدث خطأ أثناء تحميل البيانات.',
+              onRetry: vm.load,
+            );
           }
           final c = vm.customer!;
           if (c.status == 'REJECTED') {
-            return const PageList(children: [Note('لا يمكن إنشاء فاتورة لعميل مرفوض.', tone: Tone.danger)]);
+            return const PageList(
+              children: [
+                Note('لا يمكن إنشاء فاتورة لعميل مرفوض.', tone: Tone.danger),
+              ],
+            );
           }
           return Form(key: _form, child: _body(context));
         },
@@ -113,9 +149,15 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     final colors = context.colors;
     return PageList(
       children: [
-        Text('${c.name} · ${c.governorate}', style: TextStyle(color: colors.muted)),
+        Text(
+          '${c.name} · ${c.governorate}',
+          style: TextStyle(color: colors.muted),
+        ),
         if (widget.visitId != null)
-          const Note('مرتبطة بالزيارة الجارية. بعد الحفظ ارجع للزيارة من زر الرجوع.', tone: Tone.info),
+          const Note(
+            'مرتبطة بالزيارة الجارية. بعد الحفظ ارجع للزيارة من زر الرجوع.',
+            tone: Tone.info,
+          ),
         FormCard(
           children: [
             Input(
@@ -134,24 +176,37 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
                 onChanged: (v) => vm.selectWarehouse(v!),
               )
             else if (vm.warehouseName != null)
-              Text('البيع من عهدتك أولاً، والباقي من مخزن ${vm.warehouseName}.', style: TextStyle(color: colors.muted)),
+              Text(
+                'البيع من عهدتك أولاً، والباقي من ${warehouseLabel(vm.warehouseName!)}.',
+                style: TextStyle(color: colors.muted),
+              ),
           ],
         ),
         if (vm.noWarehouse)
-          const Note('لم يتم ربطك بمخزن بعد، لذلك لا يمكنك البيع. تواصل مع الإدارة.', tone: Tone.danger),
+          const Note(
+            'لم يتم ربطك بمخزن بعد، لذلك لا يمكنك البيع. تواصل مع الإدارة.',
+            tone: Tone.danger,
+          ),
         _itemsCard(context),
         _paymentCard(context),
         NewAttachments(
           receipt: _receipt,
           cheque: _chequeImage,
           showCheque: vm.isCheque,
-          hint: 'صور أو PDF، بحد أقصى 5 ميجابايت. يمكن رفعها لاحقًا من صفحة الفاتورة.',
-          onChanged: (kind, f) => setState(() => kind == 'RECEIPT' ? _receipt = f : _chequeImage = f),
+          hint:
+              'صور أو PDF، بحد أقصى 5 ميجابايت. يمكن رفعها لاحقًا من صفحة الفاتورة.',
+          onChanged: (kind, f) => setState(
+            () => kind == 'RECEIPT' ? _receipt = f : _chequeImage = f,
+          ),
         ),
         FormCard(
           children: [Input(label: 'ملاحظات', controller: _notes, maxLines: 2)],
         ),
-        SubmitButton(label: 'حفظ الفاتورة', loading: vm.saving, onPressed: vm.canSubmit ? _submit : null),
+        SubmitButton(
+          label: 'حفظ الفاتورة',
+          loading: vm.saving,
+          onPressed: vm.canSubmit ? _submit : null,
+        ),
         if (_error != null) Note(_error!, tone: Tone.danger),
       ],
     );
@@ -181,33 +236,100 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => _pickProduct(i),
-                            style: OutlinedButton.styleFrom(alignment: AlignmentDirectional.centerStart),
-                            child: Text(p?.label ?? 'اختر الصنف', overflow: TextOverflow.ellipsis),
+                            style: OutlinedButton.styleFrom(
+                              alignment: AlignmentDirectional.centerStart,
+                            ),
+                            child: Text(
+                              p?.label ?? 'اختر الصنف',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                         if (vm.lines.length > 1)
                           IconButton(
                             tooltip: 'حذف السطر ${i + 1}',
                             onPressed: () => vm.removeLine(i),
-                            icon: Icon(Icons.delete_outline, color: colors.danger),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: colors.danger,
+                            ),
                           ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        _QuantityStepper(value: line.quantity, onChanged: (q) => vm.update(() => line.quantity = q)),
-                        const Spacer(),
-                        if (p != null)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text('السعر: ${money(p.price)}', style: TextStyle(color: colors.muted, fontSize: 12)),
-                              Text('الإجمالي: ${money(l.total)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                            ],
+                        _QuantityStepper(
+                          value: line.quantity,
+                          onChanged: (q) => vm.update(() => line.quantity = q),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextFormField(
+                            key: ValueKey(('price', line, line.productId)),
+                            initialValue: line.unitPrice?.toString(),
+                            keyboardType: Input.decimal,
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              isDense: true,
+                              labelText: 'سعر البيع',
+                              hintText: p == null ? null : number(p.price),
+                            ),
+                            onChanged: (v) => vm.update(
+                              () => line.unitPrice = num.tryParse(v.trim()),
+                            ),
                           ),
+                        ),
+                        if (vm.canDiscount) ...[
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 76,
+                            child: TextFormField(
+                              key: ObjectKey(line),
+                              initialValue: line.discountPercent?.toString(),
+                              keyboardType: Input.decimal,
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                isDense: true,
+                                labelText: 'خصم %',
+                                hintText: number(vm.customerDiscount),
+                                errorText: l.discount > vm.maxDiscount
+                                    ? 'أقصى ${number(vm.maxDiscount)}'
+                                    : null,
+                              ),
+                              onChanged: (v) => vm.update(
+                                () => line.discountPercent = num.tryParse(
+                                  v.trim(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
+                    if (p != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'سعر البيع: ${money(l.price)}${l.discount > 0 ? ' − ${number(l.discount)}%' : ''}',
+                                style: TextStyle(
+                                  color: colors.muted,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              'الإجمالي: ${money(l.total)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (p != null && vm.stockLoaded) ...[
                       const SizedBox(height: 6),
                       if (l.overStock)
@@ -245,14 +367,9 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
     return FormCard(
       title: 'السداد',
       children: [
-        if (vm.pendingPayments > 0)
-          Text(
-            'فيه ${money(vm.pendingPayments)} محصّلة ولسه متسلمتش للخزنة، ومش محسوبة هنا.',
-            style: TextStyle(color: colors.muted, fontSize: 12),
-          ),
         if (!vm.isManager)
           Text(
-            'المبلغ اللي تستلمه يفضل في خزنتك لحد ما تسلّمه للإدارة، ووقتها يتخصم من مديونية العميل.',
+            'المبلغ اللي تستلمه بيتخصم من مديونية العميل على طول، ويفضل في خزنتك لحد ما تسلّمه للإدارة.',
             style: TextStyle(color: colors.muted, fontSize: 12),
           ),
         SummaryPanel(
@@ -263,19 +380,42 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
             ('المديونية بعد الفاتورة', money(vm.debtAfter), colors.danger),
           ],
         ),
+        if (vm.discountTotal > 0 || vm.dueDate != null)
+          Text(
+            [
+              if (vm.discountTotal > 0) 'الخصم: ${money(vm.discountTotal)}',
+              if (vm.dueDate != null)
+                'ميعاد استحقاق الباقي: ${shortDate(vm.dueDate!)}',
+            ].dotted(),
+            style: TextStyle(color: colors.muted, fontSize: 13),
+          ),
+        if (vm.overdue > 0 && vm.isManager)
+          Note(
+            'العميل عليه متأخرات ${money(vm.overdue)}. المندوب مش هيقدر يبيعله آجل.',
+            tone: Tone.warning,
+          ),
+        if (vm.overLimit != null && vm.isManager)
+          Note(
+            'المديونية بعد الفاتورة أكبر من حد الائتمان (${money(vm.overLimit!)}). مسموح للإدارة بس.',
+            tone: Tone.warning,
+          ),
         if (vm.previousDebtPaid > 0)
           Note(
             'الفاتورة مدفوعة بالكامل، و${money(vm.previousDebtPaid)} تُخصم من المديونية السابقة.',
             tone: Tone.success,
           )
         else if (vm.remaining > 0 && vm.paid > 0)
-          Text('المتبقي من الفاتورة (آجل): ${money(vm.remaining)}', style: TextStyle(color: colors.muted)),
+          Text(
+            'المتبقي من الفاتورة (آجل): ${money(vm.remaining)}',
+            style: TextStyle(color: colors.muted),
+          ),
         Input(
           label: 'المبلغ المدفوع مقدمًا',
           controller: _paid,
           keyboard: Input.decimal,
           ltr: true,
-          helper: 'يمكن دفع أكثر من الفاتورة لسداد مديونية سابقة (حتى ${money(vm.maxPaid)}).',
+          helper:
+              'يمكن دفع أكثر من الفاتورة لسداد مديونية سابقة (حتى ${money(vm.maxPaid)}).',
           onChanged: (v) => vm.update(() => vm.paid = num.tryParse(v) ?? 0),
         ),
         if (vm.paid > 0)
@@ -286,7 +426,11 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
             chequeDue: vm.chequeDue,
             onChequeDue: (d) => vm.update(() => vm.chequeDue = d),
           ),
-        if (vm.paymentError != null) Text(vm.paymentError!, style: TextStyle(color: colors.danger, fontSize: 12.5)),
+        if (vm.paymentError != null)
+          Text(
+            vm.paymentError!,
+            style: TextStyle(color: colors.danger, fontSize: 12.5),
+          ),
       ],
     );
   }
@@ -322,9 +466,13 @@ class _QuantityStepper extends StatelessWidget {
                   textDirection: TextDirection.ltr,
                 ),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('رجوع')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('رجوع'),
+                  ),
                   FilledButton(
-                    onPressed: () => Navigator.pop(context, int.tryParse(controller.text)),
+                    onPressed: () =>
+                        Navigator.pop(context, int.tryParse(controller.text)),
                     child: const Text('تم'),
                   ),
                 ],
@@ -368,7 +516,12 @@ class _ProductPickerState extends State<_ProductPicker> {
   @override
   Widget build(BuildContext context) {
     final list = widget.products
-        .where((p) => _q.isEmpty || p.name.contains(_q) || (p.code?.toLowerCase().contains(_q.toLowerCase()) ?? false))
+        .where(
+          (p) =>
+              _q.isEmpty ||
+              p.name.contains(_q) ||
+              (p.code?.toLowerCase().contains(_q.toLowerCase()) ?? false),
+        )
         .toList();
     final vm = widget.vm;
     return SafeArea(
@@ -397,10 +550,14 @@ class _ProductPickerState extends State<_ProductPicker> {
                       separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, i) {
                         final p = list[i];
-                        final avail = (vm.custody[p.id] ?? 0) + (vm.warehouseStock[p.id] ?? 0);
+                        final avail =
+                            (vm.custody[p.id] ?? 0) +
+                            (vm.warehouseStock[p.id] ?? 0);
                         return Tile(
                           title: p.label,
-                          subtitle: vm.stockLoaded ? 'المتاح ${number(avail)}' : null,
+                          subtitle: vm.stockLoaded
+                              ? 'المتاح ${number(avail)}'
+                              : null,
                           trailing: money(p.price),
                           onTap: () => Navigator.pop(context, p),
                         );

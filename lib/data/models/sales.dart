@@ -26,6 +26,7 @@ class LineItem {
       name = j['name'] as String? ?? '',
       unit = toStr(j['unit']),
       unitPrice = toNum(j['unitPrice']),
+      discountPercent = toNum(j['discountPercent']),
       quantity = toNum(j['quantity']),
       total = toNum(j['total']);
 
@@ -33,6 +34,9 @@ class LineItem {
   final String name;
   final String? unit;
   final num unitPrice;
+
+  /// total = unitPrice × quantity − this % (invoices only; 0 on old ones and on returns).
+  final num discountPercent;
   final num quantity;
   final num total;
 
@@ -65,6 +69,8 @@ class Invoice with Payable {
       deposit = DepositInfo.fromJson(j),
       items = toList(j['items'], LineItem.fromJson),
       total = toNum(j['total']),
+      discount = toNum(j['discount']),
+      dueDate = toDate(j['dueDate']),
       paidAmount = toNum(j['paidAmount']),
       remaining = toNum(j['remaining']),
       previousDebtPaid = toNum(j['previousDebtPaid']),
@@ -90,7 +96,15 @@ class Invoice with Payable {
   @override
   final DepositInfo deposit;
   final List<LineItem> items;
+
+  /// After discount.
   final num total;
+
+  /// Sum of the line discounts (EGP).
+  final num discount;
+
+  /// From the customer's payment terms; null = no terms.
+  final DateTime? dueDate;
   final num paidAmount;
 
   /// Left unpaid on this invoice.
@@ -206,7 +220,8 @@ class SalesReturn {
   final DateTime? cancelledAt;
   final DateTime createdAt;
 
-  String get destination => rep != null ? 'عهدة ${rep!.name}' : 'مخزن ${warehouse.name}';
+  String get destination =>
+      rep != null ? 'عهدة ${rep!.name}' : warehouseLabel(warehouse.name);
 }
 
 /// productId -> quantity already returned (active returns only).
@@ -233,6 +248,7 @@ class StatementLine {
     required this.createdBy,
     required this.cancelled,
     required this.pending,
+    this.bounced = false,
   });
 
   final StatementKind kind;
@@ -252,6 +268,9 @@ class StatementLine {
   /// Payment still with the rep: shown, but not deducted until handed over.
   final bool pending;
 
+  /// A bounced cheque: shown, never deducted.
+  final bool bounced;
+
   /// Running balance after this line; null for cancelled lines.
   num? balance;
 }
@@ -266,7 +285,8 @@ enum StatementKind {
 }
 
 /// Same as the web `buildStatement`: running balance in date order, newest first.
-/// Cancelled entries are listed but skipped; payments still with the rep add to the debit side only.
+/// Cancelled entries are listed but skipped; payments still with the rep are deducted right away,
+/// and bounced cheques never reduce it.
 List<StatementLine> buildStatement(
   List<Invoice> invoices,
   List<Collection> collections, [
@@ -285,6 +305,7 @@ List<StatementLine> buildStatement(
         createdBy: i.createdBy.name,
         cancelled: i.cancelled,
         pending: i.deposit.pending,
+        bounced: i.deposit.bounced,
       ),
     for (final c in collections)
       StatementLine(
@@ -298,6 +319,7 @@ List<StatementLine> buildStatement(
         createdBy: c.createdBy.name,
         cancelled: c.cancelled,
         pending: c.deposit.pending,
+        bounced: c.deposit.bounced,
       ),
     for (final r in returns)
       StatementLine(
@@ -316,7 +338,7 @@ List<StatementLine> buildStatement(
 
   num balance = 0;
   for (final line in lines.where((l) => !l.cancelled)) {
-    balance = round2(balance + line.debit - (line.pending ? 0 : line.credit));
+    balance = round2(balance + line.debit - (line.bounced ? 0 : line.credit));
     line.balance = balance;
   }
   return lines.reversed.toList();

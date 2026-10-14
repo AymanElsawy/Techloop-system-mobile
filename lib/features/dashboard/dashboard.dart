@@ -8,11 +8,17 @@ class Dashboard {
       collectedMonth = _num(j['collected']['month']),
       daily = {
         for (final d in j['daily'] as List)
-          d['day'] as String: (sales: _num(d['sales']), collected: _num(d['collected'])),
+          d['day'] as String: (
+            sales: _num(d['sales']),
+            collected: _num(d['collected']),
+          ),
       },
       visitsToday = Map<String, int>.from(j['visits']['today'] as Map),
       visitsMonthCompleted = j['visits']['monthCompleted'] as int,
-      visits = [for (final v in j['visits']['list'] as List) Visit.fromJson(v as Map<String, dynamic>)],
+      visits = [
+        for (final v in j['visits']['list'] as List)
+          Visit.fromJson(v as Map<String, dynamic>),
+      ],
       customersTotal = j['customers']['total'] as int,
       pendingApproval = j['customers']['pendingApproval'] as int,
       debt = _num(j['customers']['debt']),
@@ -20,7 +26,11 @@ class Dashboard {
       pendingPayments = _num(j['customers']['pendingPayments']),
       topDebtors = [
         for (final c in j['customers']['topDebtors'] as List)
-          (name: c['name'] as String, governorate: c['governorate'] as String, debit: _num(c['debit'])),
+          (
+            name: c['name'] as String,
+            governorate: c['governorate'] as String,
+            debit: _num(c['debit']),
+          ),
       ],
       cheques = [
         for (final c in j['cheques'] as List)
@@ -47,7 +57,10 @@ class Dashboard {
       cashBox = j['cashBox'] == null ? null : _money(j['cashBox']),
       custody = j['custody'] == null
           ? null
-          : (items: j['custody']['items'] as int, quantity: _num(j['custody']['quantity'])),
+          : (
+              items: j['custody']['items'] as int,
+              quantity: _num(j['custody']['quantity']),
+            ),
       treasury = j['treasury'] == null
           ? null
           : (
@@ -65,8 +78,18 @@ class Dashboard {
               value: _num(j['stock']['value']),
               lowStock: [
                 for (final p in j['stock']['lowStock'] as List)
-                  (name: p['name'] as String, quantity: _num(p['quantity']), minQuantity: _num(p['minQuantity'])),
+                  (
+                    name: p['name'] as String,
+                    quantity: _num(p['quantity']),
+                    minQuantity: _num(p['minQuantity']),
+                  ),
               ],
+            ),
+      suppliers = j['suppliers'] == null
+          ? null
+          : (
+              debt: _num(j['suppliers']['debt']),
+              count: j['suppliers']['count'] as int,
             ),
       reps = j['reps'] == null
           ? null
@@ -78,6 +101,13 @@ class Dashboard {
                   collected: _num(r['collected']),
                   visitsCompleted: r['visitsCompleted'] as int,
                   cashHeld: _num(r['cashHeld']),
+                  salesProgress: (r['salesProgress'] as num?)?.toInt(),
+                  collectionProgress: (r['collectionProgress'] as num?)
+                      ?.toInt(),
+                  commission: _num(r['commission']),
+                  yearSalesProgress: (r['yearSalesProgress'] as num?)?.toInt(),
+                  yearCollectionProgress: (r['yearCollectionProgress'] as num?)
+                      ?.toInt(),
                 ),
             ];
 
@@ -95,9 +125,26 @@ class Dashboard {
   final int debtors;
   final num pendingPayments;
   final List<({String name, String governorate, num debit})> topDebtors;
-  final List<({String customer, String? chequeNumber, num amount, DateTime dueDate, bool withRep})> cheques;
   final List<
-    ({String number, String customer, String by, num total, num remaining, bool cancelled, DateTime createdAt})
+    ({
+      String customer,
+      String? chequeNumber,
+      num amount,
+      DateTime dueDate,
+      bool withRep,
+    })
+  >
+  cheques;
+  final List<
+    ({
+      String number,
+      String customer,
+      String by,
+      num total,
+      num remaining,
+      bool cancelled,
+      DateTime createdAt,
+    })
   >
   recentInvoices;
 
@@ -106,13 +153,41 @@ class Dashboard {
   final ({int items, num quantity})? custody;
 
   // Managers
-  final ({num total, num withReps, List<({String method, num total})> byMethod})? treasury;
-  final ({int products, num value, List<({String name, num quantity, num minQuantity})> lowStock})? stock;
-  final List<({String name, num sales, num collected, int visitsCompleted, num cashHeld})>? reps;
+  final ({
+    num total,
+    num withReps,
+    List<({String method, num total})> byMethod,
+  })?
+  treasury;
+  final ({
+    int products,
+    num value,
+    List<({String name, num quantity, num minQuantity})> lowStock,
+  })?
+  stock;
+  final ({num debt, int count})? suppliers;
+  final List<
+    ({
+      String name,
+      num sales,
+      num collected,
+      int visitsCompleted,
+      num cashHeld,
+      int? salesProgress,
+      int? collectionProgress,
+      num commission,
+      int? yearSalesProgress,
+      int? yearCollectionProgress,
+    })
+  >?
+  reps;
 
   int get visitsTodayCount =>
-      (visitsToday['PLANNED'] ?? 0) + (visitsToday['IN_PROGRESS'] ?? 0) + (visitsToday['COMPLETED'] ?? 0);
-  int get visitsLeft => (visitsToday['PLANNED'] ?? 0) + (visitsToday['IN_PROGRESS'] ?? 0);
+      (visitsToday['PLANNED'] ?? 0) +
+      (visitsToday['IN_PROGRESS'] ?? 0) +
+      (visitsToday['COMPLETED'] ?? 0);
+  int get visitsLeft =>
+      (visitsToday['PLANNED'] ?? 0) + (visitsToday['IN_PROGRESS'] ?? 0);
 }
 
 typedef Money = ({num total, int count});
@@ -132,7 +207,12 @@ class Visit {
   final DateTime scheduledAt;
 }
 
-const visitStatusLabels = {'PLANNED': 'مخططة', 'IN_PROGRESS': 'جارية', 'COMPLETED': 'مكتملة', 'CANCELLED': 'ملغاة'};
+const visitStatusLabels = {
+  'PLANNED': 'مخططة',
+  'IN_PROGRESS': 'جارية',
+  'COMPLETED': 'مكتملة',
+  'CANCELLED': 'ملغاة',
+};
 
 const paymentMethodLabels = {
   'CASH': 'تحصيل نقدي',
@@ -142,4 +222,5 @@ const paymentMethodLabels = {
 };
 
 num _num(dynamic v) => v as num? ?? 0;
-Money _money(dynamic j) => (total: _num(j['total']), count: j['count'] as int? ?? 0);
+Money _money(dynamic j) =>
+    (total: _num(j['total']), count: j['count'] as int? ?? 0);

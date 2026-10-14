@@ -1,8 +1,17 @@
 import 'common.dart';
 import 'customer.dart';
 
-const visitStatusLabels = {'PLANNED': 'مخططة', 'IN_PROGRESS': 'جارية', 'COMPLETED': 'مكتملة', 'CANCELLED': 'ملغاة'};
-const visitPurposeLabels = {'SALE': 'بيع', 'COLLECTION': 'تحصيل', 'FOLLOW_UP': 'متابعة'};
+const visitStatusLabels = {
+  'PLANNED': 'مخططة',
+  'IN_PROGRESS': 'جارية',
+  'COMPLETED': 'مكتملة',
+  'CANCELLED': 'ملغاة',
+};
+const visitPurposeLabels = {
+  'SALE': 'بيع',
+  'COLLECTION': 'تحصيل',
+  'FOLLOW_UP': 'متابعة',
+};
 
 class VisitCustomer {
   VisitCustomer.fromJson(Json j)
@@ -26,7 +35,10 @@ class VisitCustomer {
   /// Current debt, for context during the visit.
   final num debit;
 
-  String get fullAddress => [city == null ? governorate : '$governorate - $city', ?address].join('، ');
+  String get fullAddress => [
+    city == null ? governorate : '$governorate - $city',
+    ?address,
+  ].join('، ');
 }
 
 class Visit {
@@ -41,7 +53,9 @@ class Visit {
       hasLocation = j['latitude'] != null,
       completedAt = toDate(j['completedAt']),
       notes = toStr(j['notes']),
-      productsDiscussed = List<String>.from(j['productsDiscussed'] as List? ?? const []),
+      productsDiscussed = List<String>.from(
+        j['productsDiscussed'] as List? ?? const [],
+      ),
       customerFeedback = toStr(j['customerFeedback']),
       nextVisitAt = toDate(j['nextVisitAt']),
       cancelReason = toStr(j['cancelReason']);

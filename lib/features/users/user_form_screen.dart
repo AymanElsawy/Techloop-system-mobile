@@ -21,7 +21,8 @@ class UserFormScreen extends StatelessWidget {
       body: AsyncView<List<Warehouse>>(
         load: context.app.inventory.warehouses,
         refreshable: false,
-        builder: (context, w) => _Form(warehouses: w.where((x) => x.isActive).toList()),
+        builder: (context, w) =>
+            _Form(warehouses: w.where((x) => x.isActive).toList()),
       ),
     );
   }
@@ -39,8 +40,7 @@ class _Form extends StatefulWidget {
 class _FormState extends State<_Form> {
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _email = TextEditingController();
-  final _password = TextEditingController();
+  final _username = TextEditingController();
   String _role = 'SALES_REP';
   List<String> _governorates = [];
   String? _warehouse;
@@ -48,6 +48,7 @@ class _FormState extends State<_Form> {
   String? _error;
 
   bool get _rep => _role == 'SALES_REP';
+  bool get _hasWarehouse => _role == 'SALES_REP' || _role == 'WAREHOUSE_REP';
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate() || _saving) return;
@@ -58,18 +59,17 @@ class _FormState extends State<_Form> {
     try {
       await context.app.users.create({
         'name': _name.text.trim(),
-        'email': _email.text.trim(),
-        'password': _password.text,
+        'username': _username.text.trim().toLowerCase(),
         'role': _role,
         'governorates': _rep ? _governorates : <String>[],
-        'warehouse': _rep ? _warehouse : null,
+        'warehouse': _hasWarehouse ? _warehouse : null,
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       setState(() {
         _saving = false;
         _error = e is ApiException && e.status == 409
-            ? 'البريد الإلكتروني مستخدم بالفعل.'
+            ? 'اسم الدخول مستخدم بالفعل، زوّد عليه حرف أو رقم.'
             : errorMessage(e, 'تعذر إنشاء المستخدم. حاول مرة أخرى.');
       });
     }
@@ -87,68 +87,90 @@ class _FormState extends State<_Form> {
               Input(
                 label: 'الاسم',
                 controller: _name,
-                validator: (v) => v.trim().length < 2 ? 'الاسم مطلوب (حرفان على الأقل).' : null,
+                validator: (v) => v.trim().length < 2
+                    ? 'الاسم مطلوب (حرفان على الأقل).'
+                    : null,
               ),
               Input(
-                label: 'البريد الإلكتروني',
-                controller: _email,
-                keyboard: TextInputType.emailAddress,
+                label: 'اسم الدخول',
+                controller: _username,
+                hint: 'ayman',
+                helper:
+                    'كلمة المرور الافتراضية 123456A، والمستخدم هيغيرها أول ما يدخل.',
+                keyboard: TextInputType.visiblePassword,
                 ltr: true,
                 validator: (v) => v.trim().isEmpty
-                    ? 'البريد الإلكتروني مطلوب.'
-                    : RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim())
+                    ? 'اسم الدخول مطلوب.'
+                    : RegExp(r'^[A-Za-z0-9._-]{3,30}$').hasMatch(v.trim())
                     ? null
-                    : 'صيغة البريد الإلكتروني غير صحيحة.',
+                    : 'من 3 لـ 30 حرف إنجليزي أو رقم أو . _ - من غير مسافات.',
               ),
-              Input(
-                label: 'كلمة المرور',
-                controller: _password,
-                obscure: true,
-                ltr: true,
-                validator: (v) => v.length < 8 ? 'كلمة المرور 8 أحرف على الأقل.' : null,
+              Text(
+                'الدور',
+                style: TextStyle(color: colors.muted, fontSize: 13),
               ),
-              Text('الدور', style: TextStyle(color: colors.muted, fontSize: 13)),
               SegmentedButton<String>(
                 segments: [
-                  for (final r in ['SALES_REP', 'ADMIN']) ButtonSegment(value: r, label: Text(roleLabels[r]!)),
+                  for (final r in ['SALES_REP', 'WAREHOUSE_REP', 'ADMIN'])
+                    ButtonSegment(value: r, label: Text(roleLabels[r]!)),
                 ],
                 selected: {_role},
                 onSelectionChanged: (s) => setState(() => _role = s.first),
               ),
             ],
           ),
-          if (_rep)
+          if (_hasWarehouse)
             FormCard(
-              title: 'المنطقة والمخزن',
+              title: _rep ? 'المنطقة والمخزن' : 'المخزن',
               children: [
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final picked = await showGovernoratePicker(
-                      context,
-                      title: 'محافظات المندوب',
-                      selected: _governorates,
-                    );
-                    if (picked != null) setState(() => _governorates = picked);
-                  },
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: Text(
-                    _governorates.isEmpty ? 'اختيار المحافظات' : _governorates.join('، '),
-                    overflow: TextOverflow.ellipsis,
+                if (_rep) ...[
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await showGovernoratePicker(
+                        context,
+                        title: 'محافظات المندوب',
+                        selected: _governorates,
+                      );
+                      if (picked != null)
+                        setState(() => _governorates = picked);
+                    },
+                    icon: const Icon(Icons.map_outlined, size: 18),
+                    label: Text(
+                      _governorates.isEmpty
+                          ? 'اختيار المحافظات'
+                          : _governorates.join('، '),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                if (_governorates.isEmpty)
-                  Text('المندوب بدون محافظات لن يرى أي عميل.', style: TextStyle(color: colors.warningFg, fontSize: 12)),
+                  if (_governorates.isEmpty)
+                    Text(
+                      'المندوب بدون محافظات لن يرى أي عميل.',
+                      style: TextStyle(color: colors.warningFg, fontSize: 12),
+                    ),
+                ],
                 Select<String?>(
                   label: 'المخزن التابع له',
                   value: _warehouse,
-                  items: {null: 'بدون مخزن', for (final w in widget.warehouses) w.id: w.name},
+                  items: {
+                    null: 'بدون مخزن',
+                    for (final w in widget.warehouses) w.id: w.name,
+                  },
                   onChanged: (v) => setState(() => _warehouse = v),
                 ),
                 if (_warehouse == null)
-                  Text('المندوب بدون مخزن لن يستطيع البيع.', style: TextStyle(color: colors.warningFg, fontSize: 12)),
+                  Text(
+                    _rep
+                        ? 'المندوب بدون مخزن لن يستطيع البيع.'
+                        : 'مندوب المخزن بدون مخزن لن يقدر يصرف أو يستلم مرتجع.',
+                    style: TextStyle(color: colors.warningFg, fontSize: 12),
+                  ),
               ],
             ),
-          SubmitButton(label: 'إنشاء المستخدم', loading: _saving, onPressed: _submit),
+          SubmitButton(
+            label: 'إنشاء المستخدم',
+            loading: _saving,
+            onPressed: _submit,
+          ),
           if (_error != null) Note(_error!, tone: Tone.danger),
         ],
       ),

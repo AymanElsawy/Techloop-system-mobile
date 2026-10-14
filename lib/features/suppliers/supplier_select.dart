@@ -57,13 +57,18 @@ class _SupplierSelectState extends State<SupplierSelect> {
             hint: 'اختر المورد',
             items: {
               if (!widget.required) null: 'بدون',
-              for (final x in _suppliers) x.id: '${x.name}${x.phone == null ? '' : ' — ${x.phone}'}',
+              for (final x in _suppliers)
+                x.id: '${x.name}${x.phone == null ? '' : ' — ${x.phone}'}',
             },
             onChanged: widget.onChanged,
           ),
         ),
         const SizedBox(width: 8),
-        IconButton.filledTonal(onPressed: _add, tooltip: 'مورد جديد', icon: const Icon(Icons.add)),
+        IconButton.filledTonal(
+          onPressed: _add,
+          tooltip: 'مورد جديد',
+          icon: const Icon(Icons.add),
+        ),
       ],
     );
   }
@@ -128,12 +133,21 @@ class _QuickSupplierDialogState extends State<_QuickSupplierDialog> {
             textDirection: TextDirection.ltr,
             decoration: const InputDecoration(labelText: 'الهاتف'),
           ),
-          if (_error != null) ...[const SizedBox(height: 12), Note(_error!, tone: Tone.danger)],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Note(_error!, tone: Tone.danger),
+          ],
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-        FilledButton(onPressed: _saving || _name.text.trim().length < 2 ? null : _save, child: const Text('إضافة')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: _saving || _name.text.trim().length < 2 ? null : _save,
+          child: const Text('إضافة'),
+        ),
       ],
     );
   }

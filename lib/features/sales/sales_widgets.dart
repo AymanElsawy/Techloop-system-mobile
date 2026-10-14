@@ -22,18 +22,38 @@ class DepositBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (deposit.pending) return const StatusBadge('مع المندوب (لم يُسلَّم للخزنة)', tone: Tone.warning);
-    if (deposit.depositId == null) return const StatusBadge('في الخزنة', tone: Tone.success);
+    if (deposit.bounced)
+      return const StatusBadge(
+        'شيك مرتد (رجع على المديونية)',
+        tone: Tone.danger,
+      );
+    if (deposit.chequeStatus == 'CLEARED')
+      return const StatusBadge('الشيك اتصرف', tone: Tone.success);
+    if (deposit.pending)
+      return const StatusBadge(
+        'مع المندوب (لم يُسلَّم للخزنة)',
+        tone: Tone.warning,
+      );
+    if (deposit.depositId == null)
+      return const StatusBadge('في الخزنة', tone: Tone.success);
     return InkWell(
       onTap: () => push(context, DepositDetailsScreen(id: deposit.depositId!)),
-      child: StatusBadge('في الخزنة · استلام #${deposit.depositNumber}', tone: Tone.success),
+      child: StatusBadge(
+        'في الخزنة · استلام #${deposit.depositNumber}',
+        tone: Tone.success,
+      ),
     );
   }
 }
 
 /// "Print / PDF" button that opens the document's A4 PDF.
 class PrintButton extends StatelessWidget {
-  const PrintButton({super.key, required this.type, required this.id, this.label = 'طباعة / PDF'});
+  const PrintButton({
+    super.key,
+    required this.type,
+    required this.id,
+    this.label = 'طباعة / PDF',
+  });
 
   final String type;
   final String id;
@@ -49,7 +69,13 @@ class PrintButton extends StatelessWidget {
 
 /// Cancelled by X on date. Reason: ...
 class CancelledNote extends StatelessWidget {
-  const CancelledNote({super.key, required this.by, required this.at, required this.reason, this.verb = 'ألغاها'});
+  const CancelledNote({
+    super.key,
+    required this.by,
+    required this.at,
+    required this.reason,
+    this.verb = 'ألغاها',
+  });
 
   final Ref? by;
   final DateTime? at;
@@ -76,7 +102,12 @@ class ItemsCard extends StatelessWidget {
       title: 'الأصناف',
       children: [
         for (final i in items)
-          Tile(title: i.label, subtitle: '${number(i.quantity)} × ${money(i.unitPrice)}', trailing: money(i.total)),
+          Tile(
+            title: i.label,
+            subtitle:
+                '${number(i.quantity)} × ${money(i.unitPrice)}${i.discountPercent > 0 ? ' − ${number(i.discountPercent)}%' : ''}',
+            trailing: money(i.total),
+          ),
         ?footer,
       ],
     );
@@ -102,7 +133,12 @@ Future<T?> cancelWithReason<T>(
 
 /// Receipt / cheque attachments of an invoice or collection: view (fetched with the token) and upload.
 class AttachmentsCard extends StatefulWidget {
-  const AttachmentsCard({super.key, required this.base, required this.attachments, required this.onUploaded});
+  const AttachmentsCard({
+    super.key,
+    required this.base,
+    required this.attachments,
+    required this.onUploaded,
+  });
 
   /// '/invoices/:id' or '/collections/:id'.
   final String base;
@@ -137,7 +173,13 @@ class _AttachmentsCardState extends State<AttachmentsCard> {
     try {
       final file = await context.app.sales.download(widget.base, a.id);
       if (!mounted) return;
-      push(context, AttachmentViewer(title: attachmentKindLabels[a.kind] ?? a.originalName, file: file));
+      push(
+        context,
+        AttachmentViewer(
+          title: attachmentKindLabels[a.kind] ?? a.originalName,
+          file: file,
+        ),
+      );
     } catch (_) {
       if (mounted) toast(context, 'تعذر تحميل الملف.');
     }
@@ -151,16 +193,25 @@ class _AttachmentsCardState extends State<AttachmentsCard> {
       children: [
         for (final a in widget.attachments)
           Tile(
-            leading: Icon(a.mimeType == 'application/pdf' ? Icons.picture_as_pdf_outlined : Icons.image_outlined),
-            title: '${attachmentKindLabels[a.kind] ?? a.kind} · ${a.originalName}',
-            subtitle: '${a.uploadedBy?.name ?? ''}${a.uploadedAt == null ? '' : '، ${longDate(a.uploadedAt!)}'}',
+            leading: Icon(
+              a.mimeType == 'application/pdf'
+                  ? Icons.picture_as_pdf_outlined
+                  : Icons.image_outlined,
+            ),
+            title:
+                '${attachmentKindLabels[a.kind] ?? a.kind} · ${a.originalName}',
+            subtitle:
+                '${a.uploadedBy?.name ?? ''}${a.uploadedAt == null ? '' : '، ${longDate(a.uploadedAt!)}'}',
             trailing: _opening == a.id ? '...' : 'عرض',
             onTap: _opening == null ? () => _view(a) : null,
           ),
         if (widget.attachments.isEmpty)
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('لا توجد مرفقات.', style: TextStyle(color: context.colors.muted)),
+            child: Text(
+              'لا توجد مرفقات.',
+              style: TextStyle(color: context.colors.muted),
+            ),
           ),
         Padding(
           padding: const EdgeInsets.all(12),
@@ -178,7 +229,10 @@ class _AttachmentsCardState extends State<AttachmentsCard> {
               FilledButton.icon(
                 onPressed: _uploading ? null : _upload,
                 icon: _uploading
-                    ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.upload_file, size: 18),
                 label: const Text('رفع'),
               ),
@@ -199,11 +253,15 @@ class AttachmentViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (file.contentType.contains('pdf')) return PdfBytesScreen(title: title, bytes: file.bytes);
+    if (file.contentType.contains('pdf'))
+      return PdfBytesScreen(title: title, bytes: file.bytes);
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       backgroundColor: Colors.black,
-      body: InteractiveViewer(maxScale: 5, child: Center(child: Image.memory(file.bytes))),
+      body: InteractiveViewer(
+        maxScale: 5,
+        child: Center(child: Image.memory(file.bytes)),
+      ),
     );
   }
 }
@@ -230,10 +288,17 @@ class NewAttachments extends StatelessWidget {
     Widget slot(String kind, String label, UploadFile? file) => Row(
       children: [
         Expanded(
-          child: Text(file == null ? '$label (اختياري)' : '$label: ${file.name}', overflow: TextOverflow.ellipsis),
+          child: Text(
+            file == null ? '$label (اختياري)' : '$label: ${file.name}',
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         if (file != null)
-          IconButton(tooltip: 'إزالة', onPressed: () => onChanged(kind, null), icon: const Icon(Icons.close))
+          IconButton(
+            tooltip: 'إزالة',
+            onPressed: () => onChanged(kind, null),
+            icon: const Icon(Icons.close),
+          )
         else
           OutlinedButton.icon(
             onPressed: () async {
@@ -258,7 +323,11 @@ class NewAttachments extends StatelessWidget {
 
 /// Uploads the picked files after the document was created. Returns false if any upload failed
 /// (the document exists; files can be re-uploaded from its page).
-Future<bool> uploadAll(SalesRepository repo, String base, Map<String, UploadFile?> files) async {
+Future<bool> uploadAll(
+  SalesRepository repo,
+  String base,
+  Map<String, UploadFile?> files,
+) async {
   try {
     for (final e in files.entries) {
       if (e.value != null) await repo.upload(base, e.key, e.value!);
@@ -291,21 +360,32 @@ class PaymentFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('طريقة السداد *', style: TextStyle(color: context.colors.muted, fontSize: 13)),
+        Text(
+          'طريقة السداد *',
+          style: TextStyle(color: context.colors.muted, fontSize: 13),
+        ),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
           runSpacing: 4,
           children: [
             for (final m in paymentMethods)
-              ChoiceChip(label: Text(paymentMethodLabels[m]!), selected: method == m, onSelected: (_) => onMethod(m)),
+              ChoiceChip(
+                label: Text(paymentMethodLabels[m]!),
+                selected: method == m,
+                onSelected: (_) => onMethod(m),
+              ),
           ],
         ),
         if (method == 'CHEQUE') ...[
           const SizedBox(height: 14),
           Input(label: 'رقم الشيك', controller: chequeNumber, ltr: true),
           const SizedBox(height: 14),
-          DateField(label: 'تاريخ استحقاق الشيك', value: chequeDue, onChanged: onChequeDue),
+          DateField(
+            label: 'تاريخ استحقاق الشيك',
+            value: chequeDue,
+            onChanged: onChequeDue,
+          ),
         ],
       ],
     );
@@ -323,7 +403,10 @@ class SummaryPanel extends StatelessWidget {
     final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: c.subtle, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: c.subtle,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Wrap(
         runSpacing: 10,
         children: [
@@ -339,7 +422,11 @@ class SummaryPanel extends StatelessWidget {
                   ),
                   Text(
                     value,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
                   ),
                 ],
               ),

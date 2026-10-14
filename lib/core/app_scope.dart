@@ -16,7 +16,9 @@ class AppScope extends InheritedWidget {
       inventory = InventoryRepository(session.api),
       treasury = TreasuryRepository(session.api),
       documents = DocumentRepository(session.api),
-      users = UserRepository(session.api);
+      users = UserRepository(session.api),
+      notifications = NotificationRepository(session.api),
+      reports = ReportRepository(session.api);
 
   final Session session;
   final CustomerRepository customers;
@@ -26,6 +28,8 @@ class AppScope extends InheritedWidget {
   final TreasuryRepository treasury;
   final DocumentRepository documents;
   final UserRepository users;
+  final NotificationRepository notifications;
+  final ReportRepository reports;
 
   @override
   bool updateShouldNotify(AppScope oldWidget) => false; // repositories are stateless
@@ -37,4 +41,5 @@ extension AppScopeX on BuildContext {
   /// The logged-in user (every screen behind the shell has one).
   User get user => app.session.user!;
   bool get isManager => user.isManager;
+  bool get canOperateWarehouses => user.canOperateWarehouses;
 }

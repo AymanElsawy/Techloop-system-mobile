@@ -18,8 +18,9 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<Dashboard> _future = _load();
 
-  Future<Dashboard> _load() async =>
-      Dashboard.fromJson(await widget.session.api.get('/dashboard') as Map<String, dynamic>);
+  Future<Dashboard> _load() async => Dashboard.fromJson(
+    await widget.session.api.get('/dashboard') as Map<String, dynamic>,
+  );
 
   Future<void> _refresh() async {
     final next = _load();
@@ -45,7 +46,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         } else {
           child = const Center(child: CircularProgressIndicator());
         }
-        return AnimatedSwitcher(duration: const Duration(milliseconds: 250), child: child);
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: child,
+        );
       },
     );
   }
@@ -68,28 +72,53 @@ class _Content extends StatelessWidget {
       if (!manager) _VisitsCard(d: d, showRep: false),
       _Grid(
         children: [
-          _Stat(label: 'مبيعات اليوم', value: money(d.salesToday.total), hint: '${d.salesToday.count} فاتورة'),
-          _Stat(label: 'مبيعات الشهر', value: money(d.salesMonth.total), hint: '${d.salesMonth.count} فاتورة'),
-          _Stat(label: 'المحصّل هذا الشهر', value: money(d.collectedMonth), hint: 'اليوم: ${money(d.collectedToday)}'),
+          _Stat(
+            label: 'مبيعات اليوم',
+            value: money(d.salesToday.total),
+            hint: '${d.salesToday.count} فاتورة',
+          ),
+          _Stat(
+            label: 'مبيعات الشهر',
+            value: money(d.salesMonth.total),
+            hint: '${d.salesMonth.count} فاتورة',
+          ),
+          _Stat(
+            label: 'المحصّل هذا الشهر',
+            value: money(d.collectedMonth),
+            hint: 'اليوم: ${money(d.collectedToday)}',
+          ),
           _Stat(
             label: manager ? 'مديونية العملاء' : 'مديونية عملائي',
             value: money(d.debt),
             valueColor: c.danger,
-            hint: '${d.debtors} عميل مدين${d.pendingPayments > 0 ? ' · تحت التسليم ${money(d.pendingPayments)}' : ''}',
+            hint:
+                '${d.debtors} عميل مدين${d.pendingPayments > 0 ? ' · تحت التسليم ${money(d.pendingPayments)}' : ''}',
           ),
         ],
       ),
       if (d.cashBox case final box?)
-        _Highlight(label: 'خزنتي (لم تُسلَّم)', value: money(box.total), lines: ['${box.count} مستند']),
+        _Highlight(
+          label: 'خزنتي (لم تُسلَّم)',
+          value: money(box.total),
+          lines: ['${box.count} مستند'],
+        ),
       if (d.treasury case final t?)
         _Highlight(
           label: 'رصيد الخزنة',
           value: money(t.total),
-          lines: [for (final m in t.byMethod) '${paymentMethodLabels[m.method] ?? m.method}: ${money(m.total)}'],
+          lines: [
+            for (final m in t.byMethod)
+              '${paymentMethodLabels[m.method] ?? m.method}: ${money(m.total)}',
+          ],
         ),
       _Grid(
         children: [
-          if (d.custody case final cu?) _Stat(label: 'عهدتي', value: number(cu.quantity), hint: '${cu.items} صنف'),
+          if (d.custody case final cu?)
+            _Stat(
+              label: 'عهدتي',
+              value: number(cu.quantity),
+              hint: '${cu.items} صنف',
+            ),
           if (d.treasury case final t?)
             _Stat(
               label: 'مع المناديب',
@@ -107,7 +136,8 @@ class _Content extends StatelessWidget {
           _Stat(
             label: 'زيارات اليوم',
             value: '${d.visitsTodayCount}',
-            hint: 'مكتملة ${d.visitsToday['COMPLETED'] ?? 0} · باقي ${d.visitsLeft} · الشهر ${d.visitsMonthCompleted}',
+            hint:
+                'مكتملة ${d.visitsToday['COMPLETED'] ?? 0} · باقي ${d.visitsLeft} · الشهر ${d.visitsMonthCompleted}',
           ),
           if (manager)
             _Stat(
@@ -115,6 +145,13 @@ class _Content extends StatelessWidget {
               value: '${d.customersTotal}',
               hint: '${d.pendingApproval} بانتظار الموافقة',
               hintColor: d.pendingApproval > 0 ? c.warningFg : null,
+            ),
+          if (d.suppliers case final s?)
+            _Stat(
+              label: 'مديونية الموردين',
+              value: money(s.debt),
+              valueColor: s.debt > 0 ? c.danger : null,
+              hint: '${s.count} مورد مدين له',
             ),
         ],
       ),
@@ -127,7 +164,8 @@ class _Content extends StatelessWidget {
           for (final ch in d.cheques)
             _Row(
               title: ch.customer,
-              subtitle: 'شيك ${ch.chequeNumber ?? '—'} · ${dayMonth(ch.dueDate)}${ch.withRep ? ' · مع المندوب' : ''}',
+              subtitle:
+                  'شيك ${ch.chequeNumber ?? '—'} · ${dayMonth(ch.dueDate)}${ch.withRep ? ' · مع المندوب' : ''}',
               trailing: money(ch.amount),
               trailingHint: _dueIn(ch.dueDate),
             ),
@@ -141,9 +179,22 @@ class _Content extends StatelessWidget {
             for (final r in reps)
               _Row(
                 title: r.name,
-                subtitle: 'تحصيل ${money(r.collected)} · زيارات ${r.visitsCompleted}',
+                subtitle: [
+                  'تحصيل ${money(r.collected)} · زيارات ${r.visitsCompleted}',
+                  if (r.salesProgress != null)
+                    'تارجت المبيعات ${number(r.salesProgress!)}%',
+                  if (r.collectionProgress != null)
+                    'التحصيل ${number(r.collectionProgress!)}%',
+                  if (r.yearSalesProgress != null)
+                    'مبيعات السنة ${number(r.yearSalesProgress!)}%',
+                  if (r.yearCollectionProgress != null)
+                    'تحصيل السنة ${number(r.yearCollectionProgress!)}%',
+                  if (r.commission != 0) 'عمولة ${money(r.commission)}',
+                ].join(' · '),
                 trailing: money(r.sales),
-                trailingHint: r.cashHeld > 0 ? 'معه ${money(r.cashHeld)}' : null,
+                trailingHint: r.cashHeld > 0
+                    ? 'معه ${money(r.cashHeld)}'
+                    : null,
                 trailingHintColor: c.danger,
               ),
           ],
@@ -153,7 +204,12 @@ class _Content extends StatelessWidget {
         empty: 'مفيش مديونيات.',
         children: [
           for (final t in d.topDebtors)
-            _Row(title: t.name, subtitle: t.governorate, trailing: money(t.debit), trailingColor: c.danger),
+            _Row(
+              title: t.name,
+              subtitle: t.governorate,
+              trailing: money(t.debit),
+              trailingColor: c.danger,
+            ),
         ],
       ),
       _Section(
@@ -163,9 +219,12 @@ class _Content extends StatelessWidget {
           for (final i in d.recentInvoices)
             _Row(
               title: i.cancelled ? '${i.customer} (ملغاة)' : i.customer,
-              subtitle: '#${i.number} · ${dayMonth(i.createdAt)} ${time(i.createdAt)}${manager ? ' · ${i.by}' : ''}',
+              subtitle:
+                  '#${i.number} · ${dayMonth(i.createdAt)} ${time(i.createdAt)}${manager ? ' · ${i.by}' : ''}',
               trailing: money(i.total),
-              trailingHint: !i.cancelled && i.remaining > 0 ? 'باقي ${money(i.remaining)}' : null,
+              trailingHint: !i.cancelled && i.remaining > 0
+                  ? 'باقي ${money(i.remaining)}'
+                  : null,
               trailingHintColor: c.danger,
             ),
         ],
@@ -221,8 +280,16 @@ class _Greeting extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('أهلاً، $name', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
-        Text(fullDate(DateTime.now()), style: TextStyle(color: context.colors.muted)),
+        Text(
+          'أهلاً، $name',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        Text(
+          fullDate(DateTime.now()),
+          style: TextStyle(color: context.colors.muted),
+        ),
       ],
     );
   }
@@ -244,7 +311,9 @@ class _Grid extends StatelessWidget {
         return Wrap(
           spacing: gap,
           runSpacing: gap,
-          children: [for (final c in children) SizedBox(width: width, child: c)],
+          children: [
+            for (final c in children) SizedBox(width: width, child: c),
+          ],
         );
       },
     );
@@ -252,7 +321,13 @@ class _Grid extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, this.hint, this.valueColor, this.hintColor});
+  const _Stat({
+    required this.label,
+    required this.value,
+    this.hint,
+    this.valueColor,
+    this.hintColor,
+  });
 
   final String label;
   final String value;
@@ -276,7 +351,11 @@ class _Stat extends StatelessWidget {
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 value,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: valueColor),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: valueColor,
+                ),
               ),
             ),
             if (hint != null)
@@ -295,7 +374,11 @@ class _Stat extends StatelessWidget {
 
 /// Dark card for the money that matters most (treasury / the rep's cash box).
 class _Highlight extends StatelessWidget {
-  const _Highlight({required this.label, required this.value, required this.lines});
+  const _Highlight({
+    required this.label,
+    required this.value,
+    required this.lines,
+  });
 
   final String label;
   final String value;
@@ -319,14 +402,21 @@ class _Highlight extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     value,
-                    style: TextStyle(color: c.onHighlight, fontSize: 26, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                      color: c.onHighlight,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
             ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: [for (final l in lines) Text(l, style: TextStyle(color: dim, fontSize: 12))],
+              children: [
+                for (final l in lines)
+                  Text(l, style: TextStyle(color: dim, fontSize: 12)),
+              ],
             ),
           ],
         ),
@@ -350,7 +440,8 @@ class _VisitsCard extends StatelessWidget {
         for (final v in d.visits)
           _Row(
             title: v.customer,
-            subtitle: '${time(v.scheduledAt)} · ${v.governorate}${showRep ? ' · ${v.rep}' : ''}',
+            subtitle:
+                '${time(v.scheduledAt)} · ${v.governorate}${showRep ? ' · ${v.rep}' : ''}',
             badge: visitStatusLabels[v.status],
           ),
       ],
@@ -359,7 +450,12 @@ class _VisitsCard extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.empty, required this.children, this.titleColor});
+  const _Section({
+    required this.title,
+    required this.empty,
+    required this.children,
+    this.titleColor,
+  });
 
   final String title;
   final String empty;
@@ -378,7 +474,11 @@ class _Section extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Text(
               title,
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: titleColor),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                color: titleColor,
+              ),
             ),
           ),
           Divider(height: 1, color: c.border),
@@ -392,7 +492,10 @@ class _Section extends StatelessWidget {
               ),
             )
           else
-            for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: c.border), children[i]],
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: c.border),
+              children[i],
+            ],
         ],
       ),
     );
@@ -429,7 +532,10 @@ class _Row extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 Text(subtitle, style: TextStyle(fontSize: 12, color: c.muted)),
               ],
             ),
@@ -437,8 +543,14 @@ class _Row extends StatelessWidget {
           if (badge != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(color: c.warningBg, borderRadius: BorderRadius.circular(20)),
-              child: Text(badge!, style: TextStyle(fontSize: 12, color: c.warningFg)),
+              decoration: BoxDecoration(
+                color: c.warningBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                badge!,
+                style: TextStyle(fontSize: 12, color: c.warningFg),
+              ),
             ),
           if (trailing != null)
             Column(
@@ -446,10 +558,19 @@ class _Row extends StatelessWidget {
               children: [
                 Text(
                   trailing!,
-                  style: TextStyle(fontWeight: FontWeight.w700, color: trailingColor),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: trailingColor,
+                  ),
                 ),
                 if (trailingHint != null)
-                  Text(trailingHint!, style: TextStyle(fontSize: 11.5, color: trailingHintColor ?? c.muted)),
+                  Text(
+                    trailingHint!,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: trailingHintColor ?? c.muted,
+                    ),
+                  ),
               ],
             ),
         ],
@@ -468,9 +589,19 @@ class _MonthChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final now = DateTime.now();
-    String key(int day) => '${now.year}-${now.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
-    final days = [for (var i = 1; i <= now.day; i++) (day: i, v: daily[key(i)])];
-    final max = days.fold<num>(1, (m, d) => [m, d.v?.sales ?? 0, d.v?.collected ?? 0].reduce((a, b) => a > b ? a : b));
+    String key(int day) =>
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+    final days = [
+      for (var i = 1; i <= now.day; i++) (day: i, v: daily[key(i)]),
+    ];
+    final max = days.fold<num>(
+      1,
+      (m, d) => [
+        m,
+        d.v?.sales ?? 0,
+        d.v?.collected ?? 0,
+      ].reduce((a, b) => a > b ? a : b),
+    );
 
     Widget bar(num value, Color color) => Expanded(
       child: TweenAnimationBuilder<double>(
@@ -484,7 +615,9 @@ class _MonthChart extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 0.5),
             decoration: BoxDecoration(
               color: color,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(2),
+              ),
             ),
           ),
         ),
@@ -497,7 +630,10 @@ class _MonthChart extends StatelessWidget {
         Container(
           width: 10,
           height: 10,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
         const SizedBox(width: 6),
         Text(text, style: TextStyle(fontSize: 12, color: c.muted)),
@@ -515,7 +651,10 @@ class _MonthChart extends StatelessWidget {
               Row(
                 children: [
                   const Expanded(
-                    child: Text('حركة الشهر يوم بيوم', style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: Text(
+                      'حركة الشهر يوم بيوم',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                   legend(c.chartSales, 'مبيعات'),
                   const SizedBox(width: 12),
@@ -537,7 +676,8 @@ class _MonthChart extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
                                   children: [
                                     bar(d.v?.sales ?? 0, c.chartSales),
                                     bar(d.v?.collected ?? 0, c.chartCollected),
@@ -546,7 +686,9 @@ class _MonthChart extends StatelessWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                d.day % 5 == 0 || d.day == 1 ? '${d.day}' : '',
+                                d.day % 5 == 0 || d.day == 1
+                                    ? dayNumber(d.day)
+                                    : '',
                                 style: TextStyle(fontSize: 9, color: c.muted),
                               ),
                             ],
@@ -578,11 +720,18 @@ class _Error extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_outlined, size: 48, color: context.colors.muted),
+            Icon(
+              Icons.cloud_off_outlined,
+              size: 48,
+              color: context.colors.muted,
+            ),
             const SizedBox(height: 12),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            OutlinedButton(onPressed: onRetry, child: const Text('إعادة المحاولة')),
+            OutlinedButton(
+              onPressed: onRetry,
+              child: const Text('إعادة المحاولة'),
+            ),
           ],
         ),
       ),

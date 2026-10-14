@@ -28,10 +28,19 @@ class FormCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (title != null) ...[
-              Text(title!, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(
+                title!,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
               const SizedBox(height: 12),
             ],
-            for (var i = 0; i < children.length; i++) ...[if (i > 0) const SizedBox(height: 14), children[i]],
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(height: 14),
+              children[i],
+            ],
           ],
         ),
       ),
@@ -84,9 +93,14 @@ class Input extends StatelessWidget {
       textAlign: ltr ? TextAlign.right : TextAlign.start,
       inputFormatters: [
         if (digitsOnly) FilteringTextInputFormatter.digitsOnly,
-        if (keyboard == decimal) FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+        if (keyboard == decimal)
+          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
       ],
-      decoration: InputDecoration(hintText: hint ?? label, helperText: helper, helperMaxLines: 3),
+      decoration: InputDecoration(
+        hintText: hint ?? label,
+        helperText: helper,
+        helperMaxLines: 3,
+      ),
       autovalidateMode: AutovalidateMode.onUserInteraction,
       validator: validator == null ? null : (v) => validator!(v ?? ''),
       onChanged: onChanged,
@@ -164,18 +178,28 @@ class DateField extends StatelessWidget {
         );
         if (day == null || !context.mounted) return;
         if (!withTime) return onChanged(day);
-        final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(value ?? now));
+        final t = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.fromDateTime(value ?? now),
+        );
         if (t == null) return;
         onChanged(DateTime(day.year, day.month, day.day, t.hour, t.minute));
       },
       child: InputDecorator(
         decoration: InputDecoration(
-          labelText: label,
+          hintText: label,
           suffixIcon: value == null
               ? const Icon(Icons.calendar_today_outlined, size: 20)
-              : IconButton(tooltip: 'مسح', icon: const Icon(Icons.close, size: 20), onPressed: () => onChanged(null)),
+              : IconButton(
+                  tooltip: 'مسح',
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => onChanged(null),
+                ),
         ),
-        child: Text(value == null ? '—' : (withTime ? dateTime(value!) : shortDate(value!))),
+        isEmpty: value == null,
+        child: value == null
+            ? null
+            : Text(withTime ? dateTime(value!) : shortDate(value!)),
       ),
     );
   }
@@ -183,7 +207,12 @@ class DateField extends StatelessWidget {
 
 /// Full-width primary button with a spinner while [loading].
 class SubmitButton extends StatelessWidget {
-  const SubmitButton({super.key, required this.label, required this.onPressed, this.loading = false});
+  const SubmitButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.loading = false,
+  });
 
   final String label;
   final VoidCallback? onPressed;
@@ -196,7 +225,10 @@ class SubmitButton extends StatelessWidget {
       child: FilledButton(
         onPressed: loading ? null : onPressed,
         child: loading
-            ? const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
+            ? const SizedBox.square(
+                dimension: 22,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              )
             : Text(label),
       ),
     );
@@ -205,7 +237,12 @@ class SubmitButton extends StatelessWidget {
 
 /// Reason dialog (cancel / reject). Returns the trimmed text, or null when dismissed.
 /// [minLength] 0 makes the reason optional.
-Future<String?> askReason(BuildContext context, {required String title, String? message, int minLength = 3}) {
+Future<String?> askReason(
+  BuildContext context, {
+  required String title,
+  String? message,
+  int minLength = 3,
+}) {
   final controller = TextEditingController();
   return showDialog<String>(
     context: context,
@@ -219,22 +256,32 @@ Future<String?> askReason(BuildContext context, {required String title, String? 
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (message != null) ...[
-                Text(message, style: TextStyle(color: context.colors.muted, fontSize: 13.5)),
+                Text(
+                  message,
+                  style: TextStyle(color: context.colors.muted, fontSize: 13.5),
+                ),
                 const SizedBox(height: 12),
               ],
               TextField(
                 controller: controller,
                 autofocus: true,
                 maxLines: 2,
-                decoration: InputDecoration(labelText: minLength == 0 ? 'السبب (اختياري)' : 'السبب'),
+                decoration: InputDecoration(
+                  labelText: minLength == 0 ? 'السبب (اختياري)' : 'السبب',
+                ),
                 onChanged: (_) => setState(() {}),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('رجوع')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('رجوع'),
+            ),
             FilledButton(
-              onPressed: valid ? () => Navigator.pop(context, controller.text.trim()) : null,
+              onPressed: valid
+                  ? () => Navigator.pop(context, controller.text.trim())
+                  : null,
               child: const Text('تأكيد'),
             ),
           ],
@@ -244,15 +291,25 @@ Future<String?> askReason(BuildContext context, {required String title, String? 
   );
 }
 
-Future<bool> confirm(BuildContext context, String title, String message) async =>
+Future<bool> confirm(
+  BuildContext context,
+  String title,
+  String message,
+) async =>
     await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('رجوع')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('تأكيد')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('رجوع'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('تأكيد'),
+          ),
         ],
       ),
     ) ??
@@ -291,7 +348,10 @@ Future<UploadFile?> pickAttachment(BuildContext context) async {
   UploadFile? file;
   try {
     if (source == 'file') {
-      final f = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: ['pdf']);
+      final f = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
       if (f != null) file = (bytes: await f.xFile.readAsBytes(), name: f.name);
     } else {
       final x = await ImagePicker().pickImage(
@@ -302,7 +362,8 @@ Future<UploadFile?> pickAttachment(BuildContext context) async {
       if (x != null) file = (bytes: await x.readAsBytes(), name: x.name);
     }
   } catch (_) {
-    if (context.mounted) toast(context, 'تعذر فتح الكاميرا أو الملفات. تأكد من السماح بالوصول.');
+    if (context.mounted)
+      toast(context, 'تعذر فتح الكاميرا أو الملفات. تأكد من السماح بالوصول.');
     return null;
   }
   if (file != null && file.bytes.length > attachmentMaxBytes) {
@@ -315,4 +376,5 @@ Future<UploadFile?> pickAttachment(BuildContext context) async {
 /// Positive number from a text field, or null.
 num? parseAmount(String text) => num.tryParse(text.trim());
 
-String? requiredText(String v, [String message = 'مطلوب.']) => v.trim().isEmpty ? message : null;
+String? requiredText(String v, [String message = 'مطلوب.']) =>
+    v.trim().isEmpty ? message : null;

@@ -10,7 +10,11 @@ import '../customers/customer_details_screen.dart';
 import 'sales_widgets.dart';
 
 class CollectionDetailsScreen extends StatefulWidget {
-  const CollectionDetailsScreen({super.key, required this.id, this.uploadFailed = false});
+  const CollectionDetailsScreen({
+    super.key,
+    required this.id,
+    this.uploadFailed = false,
+  });
 
   final String id;
 
@@ -18,7 +22,8 @@ class CollectionDetailsScreen extends StatefulWidget {
   final bool uploadFailed;
 
   @override
-  State<CollectionDetailsScreen> createState() => _CollectionDetailsScreenState();
+  State<CollectionDetailsScreen> createState() =>
+      _CollectionDetailsScreenState();
 }
 
 class _CollectionDetailsScreenState extends State<CollectionDetailsScreen> {
@@ -35,12 +40,20 @@ class _CollectionDetailsScreenState extends State<CollectionDetailsScreen> {
         builder: (context, col) => PageList(
           children: [
             if (widget.uploadFailed)
-              const Note('تم حفظ التحصيل، لكن تعذر رفع المرفقات. ارفعها مرة أخرى من قسم المرفقات.'),
+              const Note(
+                'تم حفظ التحصيل، لكن تعذر رفع المرفقات. ارفعها مرة أخرى من قسم المرفقات.',
+              ),
             PageHeader(
               title: 'إيصال رقم ${col.receiptNumber}',
-              badge: col.cancelled ? const StatusBadge('ملغى', tone: Tone.danger) : DepositBadge(col.deposit),
+              badge: col.cancelled
+                  ? const StatusBadge('ملغى', tone: Tone.danger)
+                  : DepositBadge(col.deposit),
               actions: [
-                PrintButton(type: 'COLLECTION', id: col.id, label: 'طباعة إيصال / PDF'),
+                PrintButton(
+                  type: 'COLLECTION',
+                  id: col.id,
+                  label: 'طباعة إيصال / PDF',
+                ),
                 if (context.isManager && !col.cancelled)
                   OutlinedButton(
                     onPressed: () async {
@@ -58,7 +71,12 @@ class _CollectionDetailsScreenState extends State<CollectionDetailsScreen> {
               ],
             ),
             if (col.cancelled)
-              CancelledNote(by: col.cancelledBy, at: col.cancelledAt, reason: col.cancelReason, verb: 'ألغاه'),
+              CancelledNote(
+                by: col.cancelledBy,
+                at: col.cancelledAt,
+                reason: col.cancelReason,
+                verb: 'ألغاه',
+              ),
             InfoCard(
               items: [
                 ('العميل', col.customer.name),
@@ -76,12 +94,17 @@ class _CollectionDetailsScreenState extends State<CollectionDetailsScreen> {
               footer: Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
-                  onPressed: () => push(context, CustomerDetailsScreen(id: col.customer.id)),
+                  onPressed: () =>
+                      push(context, CustomerDetailsScreen(id: col.customer.id)),
                   child: const Text('صفحة العميل'),
                 ),
               ),
             ),
-            AttachmentsCard(base: '/collections/${col.id}', attachments: col.attachments, onUploaded: _ctl.reload),
+            AttachmentsCard(
+              base: '/collections/${col.id}',
+              attachments: col.attachments,
+              onUploaded: _ctl.reload,
+            ),
           ],
         ),
       ),

@@ -25,7 +25,13 @@ class DepositDetailsScreen extends StatelessWidget {
           children: [
             PageHeader(
               title: 'استلام #${d.number}',
-              actions: [PrintButton(type: 'DEPOSIT', id: d.id, label: 'طباعة إيصال / PDF')],
+              actions: [
+                PrintButton(
+                  type: 'DEPOSIT',
+                  id: d.id,
+                  label: 'طباعة إيصال / PDF',
+                ),
+              ],
             ),
             InfoCard(
               items: [
@@ -33,11 +39,25 @@ class DepositDetailsScreen extends StatelessWidget {
                 ('استلمها', d.receivedBy.name),
                 ('التاريخ', dateTime(d.createdAt)),
                 ('الإجمالي', money(d.total)),
-                for (final m in totalsByMethod(d.payments)) (methodLabel(m.method), money(m.total)),
+                for (final m in totalsByMethod(d.payments))
+                  (methodLabel(m.method), money(m.total)),
                 if (d.notes != null) ('ملاحظات', d.notes!),
               ],
             ),
             PaymentsCard(title: 'المستندات', payments: d.payments),
+            if (d.expenses.isNotEmpty)
+              SectionCard(
+                title: 'مصروفات المندوب المخصومة',
+                children: [
+                  for (final e in d.expenses)
+                    Tile(
+                      title:
+                          'مصروف #${e.number}${e.category == null ? '' : ' · ${e.category}'}',
+                      subtitle: e.notes,
+                      trailing: '− ${money(e.amount)}',
+                    ),
+                ],
+              ),
           ],
         ),
       ),

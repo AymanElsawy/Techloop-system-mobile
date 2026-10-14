@@ -49,7 +49,11 @@ List<String> _lines(List<String?> values) => [
     if (v != null && v.isNotEmpty) v,
 ];
 
-List<(String, String)> _payment(String? method, String? chequeNumber, DateTime? due) => [
+List<(String, String)> _payment(
+  String? method,
+  String? chequeNumber,
+  DateTime? due,
+) => [
   ('طريقة الدفع', methodLabel(method)),
   if (method == 'CHEQUE') ...[
     ('رقم الشيك', chequeNumber ?? '—'),
@@ -69,13 +73,27 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
         date: i.createdAt,
         cancelled: i.cancelled ? i.cancelReason ?? '' : null,
         partyLabel: 'العميل',
-        partyLines: _lines([i.customer.name, i.customer.place, i.customer.phone]),
+        partyLines: _lines([
+          i.customer.name,
+          i.customer.place,
+          i.customer.phone,
+        ]),
         meta: [
           ('المندوب / البائع', i.createdBy.name),
           ('المخزن', i.warehouse?.name ?? '—'),
           ..._payment(i.paymentMethod, i.chequeNumber, i.chequeDueDate),
+          if (i.dueDate != null)
+            ('تاريخ استحقاق الباقي', shortDate(i.dueDate!)),
         ],
-        columns: ['#', 'الصنف', 'الوحدة', 'الكمية', 'سعر الوحدة', 'الإجمالي'],
+        columns: [
+          '#',
+          'الصنف',
+          'الوحدة',
+          'الكمية',
+          'سعر البيع',
+          if (i.discount > 0) 'الخصم',
+          'الإجمالي',
+        ],
         rows: [
           for (final (n, it) in i.items.indexed)
             [
@@ -84,13 +102,17 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
               unitLabels[it.unit] ?? '—',
               number(it.quantity),
               money(it.unitPrice),
+              if (i.discount > 0)
+                it.discountPercent > 0 ? '${number(it.discountPercent)}%' : '—',
               money(it.total),
             ],
         ],
         totals: [
+          if (i.discount > 0) ('إجمالي الخصم', money(i.discount)),
           ('إجمالي الفاتورة', money(i.total)),
           ('المدفوع', money(i.paidAmount)),
-          if (i.previousDebtPaid > 0) ('منه سداد مديونية سابقة', money(i.previousDebtPaid)),
+          if (i.previousDebtPaid > 0)
+            ('منه سداد مديونية سابقة', money(i.previousDebtPaid)),
           ('المتبقي', money(i.remaining)),
         ],
         notes: i.notes,
@@ -104,9 +126,17 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
         date: r.createdAt,
         cancelled: r.cancelled ? r.cancelReason ?? '' : null,
         partyLabel: 'العميل',
-        partyLines: _lines([r.customer.name, r.customer.place, r.customer.phone]),
-        meta: [('من فاتورة بيع رقم', r.invoiceNumber), ('سجّله', r.createdBy.name), ('البضاعة رجعت', r.destination)],
-        columns: ['#', 'الصنف', 'الوحدة', 'الكمية', 'سعر الوحدة', 'الإجمالي'],
+        partyLines: _lines([
+          r.customer.name,
+          r.customer.place,
+          r.customer.phone,
+        ]),
+        meta: [
+          ('من فاتورة بيع رقم', r.invoiceNumber),
+          ('سجّله', r.createdBy.name),
+          ('البضاعة رجعت', r.destination),
+        ],
+        columns: ['#', 'الصنف', 'الوحدة', 'الكمية', 'سعر البيع', 'الإجمالي'],
         rows: [
           for (final (n, it) in r.items.indexed)
             [
@@ -130,8 +160,15 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
         date: c.createdAt,
         cancelled: c.cancelled ? c.cancelReason ?? '' : null,
         partyLabel: 'استلمنا من السيد / السادة',
-        partyLines: _lines([c.customer.name, c.customer.place, c.customer.phone]),
-        meta: [('المحصّل', c.createdBy.name), ..._payment(c.paymentMethod, c.chequeNumber, c.chequeDueDate)],
+        partyLines: _lines([
+          c.customer.name,
+          c.customer.place,
+          c.customer.phone,
+        ]),
+        meta: [
+          ('المحصّل', c.createdBy.name),
+          ..._payment(c.paymentMethod, c.chequeNumber, c.chequeDueDate),
+        ],
         columns: ['البيان', 'المبلغ'],
         rows: [
           ['تحصيل من الحساب', money(c.amount)],
@@ -160,6 +197,15 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
               '${methodLabel(p.paymentMethod)}${p.chequeNumber == null ? '' : ' (${p.chequeNumber})'}',
               money(p.amount),
             ],
+          // The rep's expenses accepted in this handover come out of the cash.
+          for (final (n, e) in d.expenses.indexed)
+            [
+              '${d.payments.length + n + 1}',
+              'مصروف #${e.number}',
+              e.category ?? '—',
+              'نقدي',
+              '− ${money(e.amount)}',
+            ],
         ],
         totals: [('إجمالي المبلغ المورَّد', money(d.total))],
         notes: d.notes,
@@ -175,12 +221,19 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
         number: '${m.number ?? '—'}',
         date: m.createdAt,
         cancelled: null,
-        partyLabel: purchase ? 'المورد' : (type == 'ISSUE' ? 'صُرف إلى المندوب' : 'مرتجع من المندوب'),
+        partyLabel: purchase
+            ? 'المورد'
+            : (type == 'ISSUE' ? 'صُرف إلى المندوب' : 'مرتجع من المندوب'),
         partyLines: purchase
             ? _lines([sup?.name ?? '—', sup?.company, sup?.phone, sup?.address])
             : [m.rep?.name ?? '—'],
-        meta: [('المخزن', m.warehouse?.name ?? '—'), ('بواسطة', m.createdBy?.name ?? '—')],
-        columns: purchase ? ['#', 'الصنف', 'الكمية', 'سعر الشراء', 'الإجمالي'] : ['#', 'الصنف', 'الكمية'],
+        meta: [
+          ('المخزن', m.warehouse?.name ?? '—'),
+          ('بواسطة', m.createdBy?.name ?? '—'),
+        ],
+        columns: purchase
+            ? ['#', 'الصنف', 'الكمية', 'سعر الشراء', 'الإجمالي']
+            : ['#', 'الصنف', 'الكمية'],
         rows: [
           for (final (n, i) in m.items.indexed)
             purchase
@@ -193,38 +246,74 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
                   ]
                 : ['${n + 1}', i.name, number(i.quantity)],
         ],
-        totals: [('إجمالي الكمية', number(qty)), if (purchase) ('إجمالي الفاتورة', money(m.totalCost))],
+        totals: [
+          ('إجمالي الكمية', number(qty)),
+          if (purchase) ...[
+            ('إجمالي الفاتورة', money(m.totalCost)),
+            ('المدفوع', money(m.paid)),
+            ('المتبقي (مديونية للمورد)', money(m.remaining)),
+          ],
+        ],
         notes: m.notes,
-        signatures: purchase ? ('توقيع المورد', 'توقيع أمين المخزن') : ('توقيع المندوب', 'توقيع أمين المخزن'),
+        signatures: purchase
+            ? ('توقيع المورد', 'توقيع أمين المخزن')
+            : ('توقيع المندوب', 'توقيع أمين المخزن'),
       );
   }
 }
 
-/// A4 PDF with the company header, in Arabic (right to left). Black on white so it prints well.
-Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat format) async {
+/// Arabic PDF fonts + a Text that renders Arabic and Latin correctly. Shared by every PDF in the app.
+class PdfFonts {
+  PdfFonts._(this.theme, this._latin, this._latinBold);
+
+  final pw.ThemeData theme;
+  final pw.Font _latin;
+  final pw.Font _latinBold;
+  static final _arabic = RegExp(r'[؀-ۿ]');
+
   // Noto Sans Arabic, not Cairo: with Cairo (and most Arabic Google fonts) the pdf package draws some
   // letters wrong, e.g. the isolated "ي" of "حيوي". It has no Latin, so text without Arabic letters
   // (names, phone numbers) uses Noto Sans; fallback fonts would reverse Latin inside Arabic text.
-  final theme = pw.ThemeData.withFont(
-    base: await PdfGoogleFonts.notoSansArabicRegular(),
-    bold: await PdfGoogleFonts.notoSansArabicBold(),
-    fontFallback: [await PdfGoogleFonts.notoSansRegular()],
+  static Future<PdfFonts> load() async => PdfFonts._(
+    pw.ThemeData.withFont(
+      base: await PdfGoogleFonts.notoSansArabicRegular(),
+      bold: await PdfGoogleFonts.notoSansArabicBold(),
+      fontFallback: [await PdfGoogleFonts.notoSansRegular()],
+    ),
+    await PdfGoogleFonts.notoSansRegular(),
+    await PdfGoogleFonts.notoSansBold(),
   );
-  final latin = await PdfGoogleFonts.notoSansRegular();
-  final latinBold = await PdfGoogleFonts.notoSansBold();
-  final arabic = RegExp(r'[؀-ۿ]');
+
   // ponytail: the pdf package does not mirror brackets in right-to-left text, so they are swapped by hand.
-  pw.Text text(String s, {pw.TextStyle? style, pw.TextAlign? textAlign}) => arabic.hasMatch(s)
+  pw.Text text(String s, {pw.TextStyle? style, pw.TextAlign? textAlign}) =>
+      _arabic.hasMatch(s)
       ? pw.Text(
-          s.replaceAll('(', '\u0000').replaceAll(')', '(').replaceAll('\u0000', ')'),
+          s
+              .replaceAll('(', '\u0000')
+              .replaceAll(')', '(')
+              .replaceAll('\u0000', ')'),
           textAlign: textAlign,
           style: style,
         )
       : pw.Text(
           s,
           textAlign: textAlign,
-          style: (style ?? const pw.TextStyle()).copyWith(font: latin, fontBold: latinBold),
+          style: (style ?? const pw.TextStyle()).copyWith(
+            font: _latin,
+            fontBold: _latinBold,
+          ),
         );
+}
+
+/// A4 PDF with the company header, in Arabic (right to left). Black on white so it prints well.
+Future<Uint8List> buildDocumentPdf(
+  Company company,
+  PrintDoc doc,
+  PdfPageFormat format,
+) async {
+  final fonts = await PdfFonts.load();
+  final theme = fonts.theme;
+  final text = fonts.text;
   const grey = PdfColors.grey700;
   const border = PdfColors.grey500;
   final small = const pw.TextStyle(fontSize: 9, color: grey);
@@ -236,21 +325,28 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
       border: pw.Border.all(color: border),
       borderRadius: pw.BorderRadius.circular(3),
     ),
-    child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: children),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: children,
+    ),
   );
 
   final companyLines = [
     ?company.address,
     if (company.phone != null) 'تليفون: ${company.phone}',
     if (company.taxNumber != null) 'الرقم الضريبي: ${company.taxNumber}',
-    if (company.commercialRegister != null) 'سجل تجاري: ${company.commercialRegister}',
+    if (company.commercialRegister != null)
+      'سجل تجاري: ${company.commercialRegister}',
   ];
 
   // pw.Table ignores text direction: reverse the columns so the first one sits on the right.
   final columns = doc.columns.reversed.toList();
   final rows = [for (final r in doc.rows) r.reversed.toList()];
 
-  final pdf = pw.Document(title: '${doc.title} ${doc.number}', author: company.name);
+  final pdf = pw.Document(
+    title: '${doc.title} ${doc.number}',
+    author: company.name,
+  );
   pdf.addPage(
     pw.MultiPage(
       pageTheme: pw.PageTheme(
@@ -269,7 +365,11 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
                   angle: 0.5,
                   child: text(
                     'ملغاة',
-                    style: pw.TextStyle(fontSize: 90, color: PdfColors.red200, fontWeight: pw.FontWeight.bold),
+                    style: pw.TextStyle(
+                      fontSize: 90,
+                      color: PdfColors.red200,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -284,7 +384,7 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
           children: [
             if (company.footer != null) text(company.footer!, style: small),
             text(
-              '${company.name} — ${doc.title} رقم ${doc.number}${context.pagesCount > 1 ? ' — (${context.pageNumber}/${context.pagesCount})' : ''}',
+              '${company.name} — ${doc.title}${doc.number.isEmpty ? '' : ' رقم ${doc.number}'}${context.pagesCount > 1 ? ' — (${context.pageNumber}/${context.pagesCount})' : ''}',
               style: small,
             ),
           ],
@@ -294,7 +394,9 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
         // Company header
         pw.Container(
           padding: const pw.EdgeInsets.only(bottom: 10),
-          decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(width: 2))),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(bottom: pw.BorderSide(width: 2)),
+          ),
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -302,7 +404,13 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    text(company.name, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                    text(
+                      company.name,
+                      style: pw.TextStyle(
+                        fontSize: 20,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
                     for (final l in companyLines) text(l, style: small),
                   ],
                 ),
@@ -310,9 +418,19 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  text(doc.title, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                  text('رقم: ${doc.number}', style: bold),
-                  text('التاريخ: ${longDate(doc.date)} - ${time(doc.date)}', style: small),
+                  text(
+                    doc.title,
+                    style: pw.TextStyle(
+                      fontSize: 16,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  if (doc.number.isNotEmpty)
+                    text('رقم: ${doc.number}', style: bold),
+                  text(
+                    'التاريخ: ${longDate(doc.date)} - ${time(doc.date)}',
+                    style: small,
+                  ),
                 ],
               ),
             ],
@@ -327,7 +445,15 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
               child: box([
                 text(doc.partyLabel, style: small),
                 for (final (i, l) in doc.partyLines.indexed)
-                  text(l, style: i == 0 ? pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold) : null),
+                  text(
+                    l,
+                    style: i == 0
+                        ? pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                          )
+                        : null,
+                  ),
               ]),
             ),
             pw.SizedBox(width: 10),
@@ -349,18 +475,35 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
         pw.SizedBox(height: 12),
         pw.TableHelper.fromTextArray(
           headers: [
-            for (final c in columns) text(c, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+            for (final c in columns)
+              text(
+                c,
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
           ],
           data: [
-            for (final r in rows) [for (final c in r) text(c, style: const pw.TextStyle(fontSize: 10))],
+            for (final r in rows)
+              [
+                for (final c in r)
+                  text(c, style: const pw.TextStyle(fontSize: 10)),
+              ],
           ],
           border: pw.TableBorder.all(color: border),
-          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+          headerStyle: pw.TextStyle(
+            fontWeight: pw.FontWeight.bold,
+            fontSize: 10,
+          ),
           headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
           cellStyle: const pw.TextStyle(fontSize: 10),
           cellAlignment: pw.Alignment.centerRight,
           headerAlignment: pw.Alignment.centerRight,
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          cellPadding: const pw.EdgeInsets.symmetric(
+            horizontal: 5,
+            vertical: 4,
+          ),
         ),
         pw.SizedBox(height: 10),
         // Totals on the left (end side in RTL)
@@ -369,17 +512,32 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
             pw.Spacer(),
             pw.Container(
               width: 220,
-              decoration: pw.BoxDecoration(border: pw.Border.all(color: border)),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: border),
+              ),
               child: pw.Column(
                 children: [
                   for (final (i, (k, v)) in doc.totals.indexed)
                     pw.Container(
-                      color: i == doc.totals.length - 1 ? PdfColors.grey200 : null,
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      color: i == doc.totals.length - 1
+                          ? PdfColors.grey200
+                          : null,
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       child: pw.Row(
                         children: [
-                          pw.Expanded(child: text(k, style: i == doc.totals.length - 1 ? bold : null)),
-                          text(v, style: i == doc.totals.length - 1 ? bold : null),
+                          pw.Expanded(
+                            child: text(
+                              k,
+                              style: i == doc.totals.length - 1 ? bold : null,
+                            ),
+                          ),
+                          text(
+                            v,
+                            style: i == doc.totals.length - 1 ? bold : null,
+                          ),
                         ],
                       ),
                     ),
@@ -394,7 +552,10 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
         ],
         if (doc.cancelled != null && doc.cancelled!.isNotEmpty) ...[
           pw.SizedBox(height: 6),
-          text('سبب الإلغاء: ${doc.cancelled}', style: const pw.TextStyle(color: PdfColors.red700)),
+          text(
+            'سبب الإلغاء: ${doc.cancelled}',
+            style: const pw.TextStyle(color: PdfColors.red700),
+          ),
         ],
         pw.SizedBox(height: 50),
         pw.Row(
@@ -403,7 +564,9 @@ Future<Uint8List> buildDocumentPdf(Company company, PrintDoc doc, PdfPageFormat 
               pw.Expanded(
                 child: pw.Container(
                   padding: const pw.EdgeInsets.only(top: 4),
-                  decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide())),
+                  decoration: const pw.BoxDecoration(
+                    border: pw.Border(top: pw.BorderSide()),
+                  ),
                   child: text(s, textAlign: pw.TextAlign.center),
                 ),
               ),
