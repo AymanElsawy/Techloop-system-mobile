@@ -100,18 +100,26 @@ class InventoryRepository {
         await _api.post('/inventory/requests/$id/cancel') as Json,
       );
 
-  /// type: RECEIVE (needs supplierId + unitCost per item) | ISSUE | RETURN (need repId) | TRANSFER (toWarehouseId).
+  /// type: ISSUE | RETURN (need repId) | TRANSFER (toWarehouseId). Receipts use [purchase].
   Future<Movement> move(
     String warehouseId,
     String type,
     Json data,
   ) async => Movement.fromJson(
     await _api.post(
-          '/inventory/warehouses/$warehouseId/${const {'RECEIVE': 'receive', 'ISSUE': 'issue', 'RETURN': 'return', 'TRANSFER': 'transfer'}[type]}',
+          '/inventory/warehouses/$warehouseId/${const {'ISSUE': 'issue', 'RETURN': 'return', 'TRANSFER': 'transfer'}[type]}',
           data,
         )
         as Json,
   );
+
+  /// فاتورة شراء: items = [{productId | newProduct, supplierId, quantity, unitCost}];
+  /// saved as one receipt per supplier (returns them all).
+  Future<List<Movement>> purchase(String warehouseId, Json data) async =>
+      toList(
+        await _api.post('/inventory/warehouses/$warehouseId/purchase', data),
+        Movement.fromJson,
+      );
 
   /// جرد: items = [{productId, counted}]; the backend records the difference.
   Future<Movement> adjust(

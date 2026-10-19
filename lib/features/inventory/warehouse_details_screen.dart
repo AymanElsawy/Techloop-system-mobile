@@ -10,6 +10,7 @@ import 'inventory_screen.dart';
 import 'movement_list.dart';
 import 'stock_count_screen.dart';
 import 'stock_move_screen.dart';
+import '../documents/purchase_screen.dart';
 
 /// One warehouse: main stock, reps with their custody, stock actions, edit / stop. Managers only.
 class WarehouseDetailsScreen extends StatefulWidget {
@@ -27,7 +28,9 @@ class _WarehouseDetailsScreenState extends State<WarehouseDetailsScreen> {
   Future<void> _move(String type, {String? repId}) async {
     await push(
       context,
-      StockMoveScreen(type: type, warehouseId: widget.id, repId: repId),
+      type == 'RECEIVE'
+          ? PurchaseScreen(warehouseId: widget.id)
+          : StockMoveScreen(type: type, warehouseId: widget.id, repId: repId),
     );
     _ctl.reload();
   }

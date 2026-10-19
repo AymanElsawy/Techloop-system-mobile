@@ -101,6 +101,37 @@ class TreasuryRepository {
   Future<TreasuryEntry> createEntry(Json data) async => TreasuryEntry.fromJson(
     await _api.post('/treasury/entries', data) as Json,
   );
+
+  /// جرد: the actual amount in a bucket; the difference is booked as an adjustment.
+  Future<TreasuryEntry> count(
+    String method,
+    num counted,
+    String? notes,
+  ) async => TreasuryEntry.fromJson(
+    await _api.post('/treasury/count', {
+          'paymentMethod': method,
+          'counted': counted,
+          'notes': notes,
+        })
+        as Json,
+  );
+
+  /// حركة الخزنة: newest first; [from] / [to] are yyyy-MM-dd.
+  Future<LedgerPage> ledger(
+    int page, {
+    String? method,
+    String? from,
+    String? to,
+    int limit = pageSize,
+  }) async => LedgerPage.fromJson(
+    await _api.getPage(
+      '/treasury/ledger',
+      {'method': method, 'from': from, 'to': to},
+      page: page,
+      limit: limit,
+    ),
+  );
+
   Future<TreasuryEntry> cancelEntry(String id, String reason) async =>
       TreasuryEntry.fromJson(
         await _api.patch('/treasury/entries/$id/cancel', {'reason': reason})

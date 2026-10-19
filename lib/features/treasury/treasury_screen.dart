@@ -14,7 +14,9 @@ import '../../widgets/ui.dart';
 import '../sales/collection_details_screen.dart';
 import '../sales/invoice_details_screen.dart';
 import 'deposit_details_screen.dart';
+import 'count_screen.dart';
 import 'entry_form_screen.dart';
+import 'ledger_screen.dart';
 import 'rep_expense_screen.dart';
 import 'handover_screen.dart';
 
@@ -142,7 +144,8 @@ class _TreasuryScreenState extends State<TreasuryScreen> {
   Future<void> _cancelEntry(TreasuryEntry e) async {
     final reason = await askReason(
       context,
-      title: 'إلغاء ${entryTypeLabels[e.type]} #${e.number}',
+      title:
+          'إلغاء ${e.rep == null ? entryTypeLabels[e.type] : 'مصروف مندوب'} #${e.number}',
     );
     if (reason == null || !mounted) return;
     await _run(
@@ -164,6 +167,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> {
       subtitle: [
         dateTime(e.createdAt),
         'من ${bucketLabel(e.paymentMethod)}',
+        if (e.counted != null) 'اتعدّ ${money(e.counted!)}',
         e.createdBy.name,
         if (e.cancelReason != null)
           'سبب الإلغاء: ${e.cancelReason}'
@@ -176,7 +180,9 @@ class _TreasuryScreenState extends State<TreasuryScreen> {
           : e.pending
           ? const StatusBadge('مع المندوب', tone: Tone.warning)
           : null,
-      trailing: money(e.amount),
+      // An adjustment is signed (+ adds money); everything else here takes money out.
+      trailing:
+          '${e.type == 'ADJUSTMENT' && e.amount > 0 ? '+' : ''}${money(e.amount)}',
       trailingHint: e.cancelled ? null : 'إلغاء',
       trailingHintColor: colors.danger,
       onTap: e.cancelled
@@ -241,8 +247,32 @@ class _TreasuryScreenState extends State<TreasuryScreen> {
                 value: money(s.total),
                 lines: [
                   for (final m in s.byMethod)
-                    '${bucketLabel(m.method)}: ${money(m.total)}',
-                  'بعد خصم المصروفات والسحب ومدفوعات الموردين (من 30/9/2026).',
+                    if (m.method != 'CHEQUE')
+                      '${bucketLabel(m.method)}: ${money(m.total)}',
+                  // Not money yet: shown, never added to the balance.
+                  for (final m in s.byMethod)
+                    if (m.method == 'CHEQUE' && (m.total != 0 || m.count > 0))
+                      '${bucketLabel(m.method)} (${m.count}): ${money(m.total)} · مش محسوبة في الرصيد',
+                  'الرصيد = اللي دخل − اللي خرج. لو مش مطابق للفلوس الفعلية اعمل جرد.',
+                ],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: const Text('حركة الخزنة'),
+                      onPressed: () => _open(const LedgerScreen()),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.fact_check_outlined),
+                      label: const Text('جرد'),
+                      onPressed: () => _open(CountScreen(summary: s)),
+                    ),
+                  ),
                 ],
               ),
               SectionCard(
@@ -335,7 +365,7 @@ class _TreasuryScreenState extends State<TreasuryScreen> {
                 ],
               ),
               Text(
-                'المبالغ دي بتتخصم من مديونية العميل لما الإدارة تستلمها منك.',
+                'المبالغ دي اتخصمت من مديونية العملاء خلاص، ولازم تسلّمها للإدارة.',
                 style: TextStyle(color: colors.muted, fontSize: 13),
               ),
               PaymentsCard(

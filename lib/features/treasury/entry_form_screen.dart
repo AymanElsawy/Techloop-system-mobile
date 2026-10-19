@@ -32,10 +32,13 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
 
   bool get _isExpense => widget.type == 'EXPENSE';
 
-  /// Any bucket, even at zero or below; money already in the bank can't be deposited again.
+  /// Any money bucket, even at zero or below. Never cheques: they move only by
+  /// "اتصرف" / "مرتد". Money already in the bank can't be deposited again.
   List<String> get _methods => [
     for (final m in paymentMethods)
-      if (!(widget.type == 'BANK_DEPOSIT' && m == 'BANK_TRANSFER')) m,
+      if (m != 'CHEQUE' &&
+          !(widget.type == 'BANK_DEPOSIT' && m == 'BANK_TRANSFER'))
+        m,
   ];
   num get _available =>
       widget.summary.byMethod
@@ -64,10 +67,7 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     } catch (e) {
       setState(() {
         _saving = false;
-        _error = errorMessage(
-          e,
-          'المبلغ أكبر من المتاح في الخزنة. حدّث الصفحة وحاول مرة أخرى.',
-        );
+        _error = errorMessage(e, 'تعذر الحفظ. حاول مرة أخرى.');
       });
     }
   }

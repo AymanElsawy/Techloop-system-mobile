@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/api.dart';
 import '../../core/app_scope.dart';
@@ -9,19 +10,16 @@ import '../../widgets/async_view.dart';
 import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
 
-/// Company details printed on every document. Managers only.
+/// تعديل بيانات الشركة (a shell tab): details printed on every document. Managers only.
 class CompanyFormScreen extends StatelessWidget {
   const CompanyFormScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('بيانات الشركة على الفواتير')),
-      body: AsyncView<Company>(
-        load: context.app.documents.company,
-        refreshable: false,
-        builder: (context, c) => _Form(company: c),
-      ),
+    return AsyncView<Company>(
+      load: context.app.documents.company,
+      refreshable: false,
+      builder: (context, c) => _Form(company: c),
     );
   }
 }
@@ -43,6 +41,7 @@ class _FormState extends State<_Form> {
   late final _tax = TextEditingController(text: c.taxNumber);
   late final _cr = TextEditingController(text: c.commercialRegister);
   late final _footer = TextEditingController(text: c.footer);
+  late String? _logo = c.logo;
   bool _saving = false;
   (bool, String)? _message;
 
@@ -59,6 +58,7 @@ class _FormState extends State<_Form> {
         'taxNumber': _tax.text.trim(),
         'commercialRegister': _cr.text.trim(),
         'footer': _footer.text.trim(),
+        'logo': _logo,
       });
       setState(() => _message = (true, 'اتحفظت. هتظهر على كل الفواتير.'));
     } catch (e) {
@@ -67,11 +67,66 @@ class _FormState extends State<_Form> {
     setState(() => _saving = false);
   }
 
+  Future<void> _pickLogo() async {
+    try {
+      final x = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 600,
+        imageQuality: 85,
+      );
+      if (x == null) return;
+      final bytes = await x.readAsBytes();
+      if (bytes.length > 300 * 1024) {
+        if (mounted) toast(context, 'اللوجو أكبر من 300 كيلوبايت.');
+        return;
+      }
+      final png = x.name.toLowerCase().endsWith('.png');
+      setState(
+        () => _logo = UriData.fromBytes(
+          bytes,
+          mimeType: png ? 'image/png' : 'image/jpeg',
+        ).toString(),
+      );
+    } catch (_) {
+      if (mounted) toast(context, 'تعذر فتح الصور. تأكد من السماح بالوصول.');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PageList(
       children: [
+        const Text(
+          'تعديل بيانات الشركة',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
         const Text('بتتطبع في رأس وذيل كل فاتورة وإيصال.'),
+        SectionCard(
+          title: 'اللوجو',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_logo != null)
+                TextButton(
+                  onPressed: () => setState(() => _logo = null),
+                  child: const Text('حذف'),
+                ),
+              TextButton(
+                onPressed: _pickLogo,
+                child: Text(_logo == null ? 'رفع لوجو' : 'تغيير'),
+              ),
+            ],
+          ),
+          empty: 'مفيش لوجو. PNG أو JPG، أقصى حجم 300 كيلوبايت.',
+          children: [
+            if (_logo != null)
+              Image.memory(
+                UriData.parse(_logo!).contentAsBytes(),
+                height: 80,
+                semanticLabel: 'لوجو الشركة',
+              ),
+          ],
+        ),
         FormCard(
           children: [
             Input(

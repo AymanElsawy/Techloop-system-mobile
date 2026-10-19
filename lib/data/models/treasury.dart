@@ -1,6 +1,8 @@
 /// Treasury (الخزنة), printable documents (الفواتير) and managed users.
 library;
 
+import 'dart:typed_data';
+
 import 'package:intl/intl.dart';
 
 import 'common.dart';
@@ -92,7 +94,11 @@ const entryTypeLabels = {
   'EXPENSE': 'مصروف',
   'WITHDRAWAL': 'سحب',
   'BANK_DEPOSIT': 'إيداع في البنك',
+  'ADJUSTMENT': 'تسوية جرد', // signed (counted − balance), made by a count only
 };
+
+/// Real-money buckets (cheques aren't money until cashed).
+const moneyBuckets = ['CASH', 'VODAFONE_CASH', 'BANK_TRANSFER'];
 
 /// Suggestions for the expense category (free text).
 const expenseCategories = [
@@ -110,7 +116,7 @@ const bucketLabels = {
   'CASH': 'نقدي',
   'VODAFONE_CASH': 'فودافون كاش',
   'BANK_TRANSFER': 'البنك / تحويل',
-  'CHEQUE': 'شيكات',
+  'CHEQUE': 'شيكات لم تُصرف',
 };
 String bucketLabel(String method) => bucketLabels[method] ?? method;
 
@@ -123,6 +129,7 @@ class TreasuryEntry {
       amount = toNum(j['amount']),
       paymentMethod = j['paymentMethod'] as String,
       category = toStr(j['category']),
+      counted = j['counted'] == null ? null : toNum(j['counted']),
       notes = toStr(j['notes']),
       cancelled = j['status'] == 'CANCELLED',
       cancelReason = toStr(j['cancelReason']),
@@ -138,6 +145,9 @@ class TreasuryEntry {
   final num amount;
   final String paymentMethod;
   final String? category;
+
+  /// ADJUSTMENT only: what was counted.
+  final num? counted;
   final String? notes;
   final bool cancelled;
   final String? cancelReason;
@@ -356,7 +366,8 @@ class Company {
       address = toStr(j['address']),
       taxNumber = toStr(j['taxNumber']),
       commercialRegister = toStr(j['commercialRegister']),
-      footer = toStr(j['footer']);
+      footer = toStr(j['footer']),
+      logo = toStr(j['logo']);
 
   final String name;
   final String? phone;
@@ -364,6 +375,13 @@ class Company {
   final String? taxNumber;
   final String? commercialRegister;
   final String? footer;
+
+  /// data URL (PNG/JPEG), printed in the header.
+  final String? logo;
+
+  /// The logo's bytes for the PDF, or null.
+  Uint8List? get logoBytes =>
+      logo == null ? null : UriData.parse(logo!).contentAsBytes();
 }
 
 /// A daily backup archive (database + attachments). Owner only.
@@ -561,4 +579,43 @@ class RepTargetReport {
 
   static String _bounced(dynamic d) =>
       d['chequeStatus'] == 'BOUNCED' ? ' (شيك مرتد - غير محسوب)' : '';
+}
+
+/// حركة الخزنة: one movement of real money; [amount] is + in / − out.
+class LedgerRow {
+  LedgerRow.fromJson(Json j)
+    : date = toDate(j['date'])!,
+      title = j['title'] as String,
+      party = toStr(j['party']),
+      method = j['method'] as String,
+      amount = toNum(j['amount']),
+      balance = toNum(j['balance']),
+      refType = (j['ref'] as Json?)?['type'] as String?,
+      refId = (j['ref'] as Json?)?['id'] as String?;
+
+  final DateTime date;
+  final String title;
+  final String? party;
+  final String method;
+  final num amount;
+  final num balance;
+
+  /// DEPOSIT | INVOICE | COLLECTION | SUPPLIER | MOVEMENT, or null.
+  final String? refType;
+  final String? refId;
+}
+
+/// One ledger page plus the period's totals (from `meta`).
+class LedgerPage extends PageOf<LedgerRow> {
+  LedgerPage.fromJson(Json body)
+    : opening = toNum((body['meta'] as Json?)?['opening']),
+      inflow = toNum((body['meta'] as Json?)?['inflow']),
+      outflow = toNum((body['meta'] as Json?)?['outflow']),
+      closing = toNum((body['meta'] as Json?)?['closing']),
+      super.fromJson(body, LedgerRow.fromJson);
+
+  final num opening;
+  final num inflow;
+  final num outflow;
+  final num closing;
 }

@@ -312,6 +312,8 @@ Future<Uint8List> buildDocumentPdf(
   PdfPageFormat format,
 ) async {
   final fonts = await PdfFonts.load();
+  final logoBytes = company.logoBytes;
+  final logo = logoBytes == null ? null : pw.MemoryImage(logoBytes);
   final theme = fonts.theme;
   final text = fonts.text;
   const grey = PdfColors.grey700;
@@ -400,6 +402,10 @@ Future<Uint8List> buildDocumentPdf(
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
+              if (logo != null) ...[
+                pw.Image(logo, height: 56, width: 96, fit: pw.BoxFit.contain),
+                pw.SizedBox(width: 10),
+              ],
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,

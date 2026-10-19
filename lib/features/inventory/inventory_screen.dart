@@ -12,7 +12,7 @@ import '../../widgets/ui.dart';
 import 'custody_requests.dart';
 import 'movement_list.dart';
 import 'product_list.dart';
-import 'stock_move_screen.dart';
+import '../documents/purchase_screen.dart';
 import 'warehouse_details_screen.dart';
 
 /// المخزن: warehouses (managers) or my custody (reps), products, custody requests, and the movements log.
@@ -95,8 +95,7 @@ class _WarehousesState extends State<_Warehouses> {
               children: [
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: () =>
-                        _open(const StockMoveScreen(type: 'RECEIVE')),
+                    onPressed: () => _open(const PurchaseScreen()),
                     icon: const Icon(Icons.local_shipping_outlined, size: 18),
                     label: const Text('وارد من مورد'),
                   ),

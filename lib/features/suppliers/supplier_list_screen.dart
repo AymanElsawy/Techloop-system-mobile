@@ -7,7 +7,7 @@ import '../../core/format.dart';
 import '../../data/models/inventory.dart';
 import '../../widgets/paged_list.dart';
 import '../../widgets/ui.dart';
-import '../inventory/stock_move_screen.dart';
+import '../documents/purchase_screen.dart';
 import 'supplier_details_screen.dart';
 import 'supplier_form.dart';
 
@@ -77,8 +77,7 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
                     ),
                     const SizedBox(width: 8),
                     OutlinedButton(
-                      onPressed: () =>
-                          _open(const StockMoveScreen(type: 'RECEIVE')),
+                      onPressed: () => _open(const PurchaseScreen()),
                       child: const Text('وارد جديد'),
                     ),
                   ],

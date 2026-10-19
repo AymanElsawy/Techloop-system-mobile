@@ -8,6 +8,7 @@ import '../../main.dart' show themeMode;
 import '../audit_log/audit_log_screen.dart';
 import '../customers/customer_list_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../documents/company_form_screen.dart';
 import '../documents/document_list_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../notifications/notification_list_screen.dart';
@@ -108,6 +109,12 @@ final _tabs = [
     'المستخدمون',
     Icons.group_outlined,
     (_) => const UserListScreen(),
+    managersOnly: true,
+  ),
+  _Tab(
+    'بيانات الشركة',
+    Icons.business_outlined,
+    (_) => const CompanyFormScreen(),
     managersOnly: true,
   ),
   _Tab('السجل', Icons.history, (_) => const AuditLogScreen(), ownerOnly: true),

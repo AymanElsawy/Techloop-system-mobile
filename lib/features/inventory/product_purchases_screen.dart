@@ -8,7 +8,7 @@ import '../../widgets/ui.dart';
 import '../documents/document_pdf_screen.dart';
 import '../suppliers/supplier_details_screen.dart';
 import 'product_form_screen.dart';
-import 'stock_move_screen.dart';
+import '../documents/purchase_screen.dart';
 
 typedef _Data = ({Product product, PurchaseHistory history});
 
@@ -64,9 +64,7 @@ class _ProductPurchasesScreenState extends State<ProductPurchasesScreen> {
                   if (p.isActive) ...[
                     Expanded(
                       child: FilledButton(
-                        onPressed: () => _open(
-                          StockMoveScreen(type: 'RECEIVE', productId: p.id),
-                        ),
+                        onPressed: () => _open(PurchaseScreen(productId: p.id)),
                         child: const Text('وارد'),
                       ),
                     ),

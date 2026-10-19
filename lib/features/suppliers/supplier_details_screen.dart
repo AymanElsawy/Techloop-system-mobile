@@ -9,7 +9,7 @@ import '../../data/models/inventory.dart';
 import '../../widgets/async_view.dart';
 import '../../widgets/ui.dart';
 import '../documents/document_pdf_screen.dart';
-import '../inventory/stock_move_screen.dart';
+import '../documents/purchase_screen.dart';
 import '../sales/sales_widgets.dart';
 import 'supplier_form.dart';
 import 'supplier_payment_form.dart';
@@ -58,10 +58,7 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
             if (s.isActive)
               FilledButton(
                 onPressed: () async {
-                  await push(
-                    context,
-                    StockMoveScreen(type: 'RECEIVE', supplierId: s.id),
-                  );
+                  await push(context, PurchaseScreen(supplierId: s.id));
                   _ctl.reload();
                 },
                 child: const Text('وارد من المورد ده'),

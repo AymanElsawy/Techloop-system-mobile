@@ -3,19 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/app_scope.dart';
-import '../../core/session.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
 import '../../data/models/treasury.dart';
 import '../../widgets/paged_list.dart';
 import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
+import '../../widgets/async_view.dart';
+import '../inventory/stock_move_screen.dart';
 import '../sales/collection_details_screen.dart';
+import '../sales/collection_form_screen.dart';
+import '../sales/invoice_form_screen.dart';
+import '../sales/return_form_screen.dart';
+import '../treasury/handover_screen.dart';
 import '../sales/invoice_details_screen.dart';
 import '../sales/return_details_screen.dart';
 import '../treasury/deposit_details_screen.dart';
-import 'company_form_screen.dart';
 import 'document_pdf_screen.dart';
+import 'purchase_screen.dart';
 
 const _typeTones = {
   'SALE': Tone.success,
@@ -50,11 +55,34 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
   DateTime? _from;
   DateTime? _to;
   String _query = '';
+  int _reload = 0;
 
   @override
   void dispose() {
     _debounce?.cancel();
     super.dispose();
+  }
+
+  /// Opens the existing form of [type]; sales, returns, collections and handovers pick their customer / rep first.
+  Future<void> _create(String type) async {
+    final party = switch (type) {
+      'SALE' || 'SALE_RETURN' || 'COLLECTION' => 'customer',
+      'DEPOSIT' => 'rep',
+      _ => null,
+    };
+    final id = party == null ? '' : await _pickParty(context, type);
+    if (id == null || !mounted) return;
+    await push(context, switch (type) {
+      'SALE' => InvoiceFormScreen(customerId: id),
+      'SALE_RETURN' => ReturnFormScreen(customerId: id),
+      'COLLECTION' => CollectionFormScreen(customerId: id),
+      'DEPOSIT' => HandoverScreen(repId: id),
+      'PURCHASE' => const PurchaseScreen(),
+      _ => StockMoveScreen(
+        type: type,
+      ), // ISSUE / RETURN: warehouse picked in the form
+    });
+    if (mounted) setState(() => _reload++);
   }
 
   @override
@@ -87,17 +115,14 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
                 },
               ),
               if (manager) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => push(context, const CompanyFormScreen()),
-                  icon: const Icon(Icons.business_outlined),
-                  // The owner also finds the backups there.
-                  label: Text(
-                    context.user.role == UserRole.owner
-                        ? 'بيانات الشركة والنسخ الاحتياطي'
-                        : 'بيانات الشركة على الفواتير',
+                if (_type case final type?) ...[
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () => _create(type),
+                    icon: const Icon(Icons.add),
+                    label: Text('إنشاء ${documentTypeLabels[type]}'),
                   ),
-                ),
+                ],
               ],
               const SizedBox(height: 8),
               Row(
@@ -133,7 +158,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
         ),
         Expanded(
           child: PagedListView<DocumentRow>(
-            key: ValueKey((_type, _from, _to, _query)),
+            key: ValueKey((_type, _from, _to, _query, _reload)),
             load: (page) => context.app.documents.page(
               page,
               type: _type,
@@ -201,4 +226,94 @@ class _DocumentCard extends StatelessWidget {
     'RETURN': 'مرتجع عهدة',
     'DEPOSIT': 'توريد',
   }[type]!;
+}
+
+/// Customers (or sales reps for DEPOSIT) to pick from; returns the picked id.
+Future<String?> _pickParty(BuildContext context, String type) =>
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _PartyPicker(type: type),
+    );
+
+class _PartyPicker extends StatefulWidget {
+  const _PartyPicker({required this.type});
+
+  final String type;
+
+  @override
+  State<_PartyPicker> createState() => _PartyPickerState();
+}
+
+class _PartyPickerState extends State<_PartyPicker> {
+  String _query = '';
+
+  bool get _rep => widget.type == 'DEPOSIT';
+
+  Future<List<({String id, String name, String? hint})>> _load() async {
+    final app = context.app;
+    if (_rep) {
+      return [
+        for (final u in await app.users.list())
+          if (u.isRep && u.isActive) (id: u.id, name: u.name, hint: null),
+      ];
+    }
+    return [
+      for (final c in await app.customers.list())
+        // Rejected customers can still pay (collection) but not buy or return.
+        if (widget.type == 'COLLECTION' || c.status != 'REJECTED')
+          (id: c.id, name: c.name, hint: c.governorate),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: TextField(
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: _rep ? 'اختر المندوب' : 'اختر العميل',
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+              ),
+              onChanged: (v) => setState(() => _query = v.trim()),
+            ),
+          ),
+          Expanded(
+            child: AsyncView(
+              refreshable: false,
+              load: _load,
+              builder: (context, list) {
+                final rows = [
+                  for (final p in list)
+                    if (p.name.contains(_query)) p,
+                ];
+                return ListView(
+                  children: [
+                    for (final p in rows)
+                      ListTile(
+                        title: Text(p.name),
+                        subtitle: p.hint == null ? null : Text(p.hint!),
+                        onTap: () => Navigator.pop(context, p.id),
+                      ),
+                    if (rows.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: Text('مفيش نتايج.')),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

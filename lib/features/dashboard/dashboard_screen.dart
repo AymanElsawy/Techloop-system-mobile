@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/format.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
+import '../../data/models/treasury.dart';
 import 'dashboard.dart';
 
 /// Home tab: everything at a glance. Reps see their own numbers first (today's visits, cash box, custody).
@@ -108,7 +109,7 @@ class _Content extends StatelessWidget {
           value: money(t.total),
           lines: [
             for (final m in t.byMethod)
-              '${paymentMethodLabels[m.method] ?? m.method}: ${money(m.total)}',
+              '${bucketLabel(m.method)}: ${money(m.total)}',
           ],
         ),
       _Grid(

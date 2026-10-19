@@ -13,7 +13,7 @@ import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
 import 'product_form_screen.dart';
 import 'product_purchases_screen.dart';
-import 'stock_move_screen.dart';
+import '../documents/purchase_screen.dart';
 
 /// الأصناف: search, unit / status / low-stock filters. Managers edit, receive and delete; reps only read.
 class ProductList extends StatefulWidget {
@@ -63,10 +63,7 @@ class _ProductListState extends State<ProductList> {
               subtitle: const Text(
                 'زوّد الكمية بسعر المورد الجديد، ومتوسط السعر يتحسب تلقائي.',
               ),
-              onTap: () => Navigator.pop(
-                context,
-                const StockMoveScreen(type: 'RECEIVE'),
-              ),
+              onTap: () => Navigator.pop(context, const PurchaseScreen()),
             ),
             const SizedBox(height: 8),
           ],
@@ -197,8 +194,7 @@ class _ProductListState extends State<ProductList> {
                   : () => _showDetails(context, p),
               onEdit: manager ? () => _open(ProductFormScreen(id: p.id)) : null,
               onReceive: manager && p.isActive
-                  ? () =>
-                        _open(StockMoveScreen(type: 'RECEIVE', productId: p.id))
+                  ? () => _open(PurchaseScreen(productId: p.id))
                   : null,
               onDelete: manager ? () => _delete(p) : null,
             ),
