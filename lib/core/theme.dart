@@ -47,7 +47,8 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color neutralFg;
 
   static const light = AppColors(
-    muted: Color(0xFF045D95),
+    // Slate grey, so secondary text doesn't look like a link.
+    muted: Color(0xFF457187),
     border: Color(0xFFCFEDFC),
     danger: Color(0xFFCC0000),
     warningBg: Color(0xFFFFF0E3),
@@ -107,7 +108,8 @@ ThemeData buildTheme(Brightness brightness) {
         seedColor: const Color(0xFF233843),
         brightness: brightness,
       ).copyWith(
-        primary: dark ? const Color(0xFFF0EBD8) : const Color(0xFF045D95),
+        // Navy like the app bar (the bright blue looked too loud on buttons).
+        primary: dark ? const Color(0xFFF0EBD8) : const Color(0xFF233843),
         onPrimary: dark ? Colors.black : Colors.white,
         // Tonal buttons and selected chips (M3 uses the containers, not primary).
         primaryContainer: dark
@@ -151,9 +153,19 @@ ThemeData buildTheme(Brightness brightness) {
         color: Colors.white,
       ),
     ),
-    bottomNavigationBarTheme: BottomNavigationBarThemeData(
+    navigationBarTheme: NavigationBarThemeData(
       backgroundColor: scheme.surface,
+      indicatorColor: scheme.secondaryContainer,
       elevation: 0,
+      height: 68,
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => GoogleFonts.cairo(
+          fontSize: 12,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+        ),
+      ),
     ),
     cardTheme: CardThemeData(
       color: scheme.surface,

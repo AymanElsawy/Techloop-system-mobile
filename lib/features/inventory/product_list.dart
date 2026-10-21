@@ -94,113 +94,110 @@ class _ProductListState extends State<ProductList> {
   @override
   Widget build(BuildContext context) {
     final manager = context.isManager;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'بحث بالاسم أو الكود أو الشركة',
-                        prefixIcon: Icon(Icons.search),
-                        isDense: true,
-                      ),
-                      onChanged: (v) {
-                        _debounce?.cancel();
-                        _debounce = Timer(
-                          const Duration(milliseconds: 300),
-                          () => setState(() => _query = v.trim()),
-                        );
-                      },
-                    ),
+    return Scaffold(
+      floatingActionButton: manager
+          ? FloatingActionButton.extended(
+              onPressed: _addProduct,
+              icon: const Icon(Icons.add),
+              label: const Text('صنف جديد'),
+            )
+          : null,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(
+              children: [
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'بحث بالاسم أو الكود أو الشركة',
+                    prefixIcon: Icon(Icons.search),
+                    isDense: true,
                   ),
-                  if (manager) ...[
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: _addProduct,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('صنف جديد'),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    FilterChip(
-                      label: const Text('كمية منخفضة فقط'),
-                      selected: _lowStock,
-                      onSelected: (v) => setState(() => _lowStock = v),
-                    ),
-                    const SizedBox(width: 8),
-                    for (final u in unitLabels.entries) ...[
-                      ChoiceChip(
-                        label: Text(u.value),
-                        selected: _unit == u.key,
-                        onSelected: (s) =>
-                            setState(() => _unit = s ? u.key : null),
+                  onChanged: (v) {
+                    _debounce?.cancel();
+                    _debounce = Timer(
+                      const Duration(milliseconds: 300),
+                      () => setState(() => _query = v.trim()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      FilterChip(
+                        label: const Text('كمية منخفضة فقط'),
+                        selected: _lowStock,
+                        onSelected: (v) => setState(() => _lowStock = v),
                       ),
                       const SizedBox(width: 8),
+                      for (final u in unitLabels.entries) ...[
+                        ChoiceChip(
+                          label: Text(u.value),
+                          selected: _unit == u.key,
+                          onSelected: (s) =>
+                              setState(() => _unit = s ? u.key : null),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (manager)
+                        ChoiceChip(
+                          label: Text(
+                            _active == true
+                                ? 'النشطة'
+                                : _active == false
+                                ? 'الموقوفة'
+                                : 'الكل',
+                          ),
+                          selected: _active != true,
+                          // Cycles: active -> stopped -> all.
+                          onSelected: (_) => setState(
+                            () => _active = _active == true
+                                ? false
+                                : _active == false
+                                ? null
+                                : true,
+                          ),
+                        ),
                     ],
-                    if (manager)
-                      ChoiceChip(
-                        label: Text(
-                          _active == true
-                              ? 'النشطة'
-                              : _active == false
-                              ? 'الموقوفة'
-                              : 'الكل',
-                        ),
-                        selected: _active != true,
-                        // Cycles: active -> stopped -> all.
-                        onSelected: (_) => setState(
-                          () => _active = _active == true
-                              ? false
-                              : _active == false
-                              ? null
-                              : true,
-                        ),
-                      ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: PagedListView<Product>(
+              key: ValueKey((_query, _unit, _active, _lowStock)),
+              controller: _ctl,
+              load: (page) => context.app.inventory.productsPage(
+                page,
+                search: _query,
+                unit: _unit,
+                active: _active,
+                lowStock: _lowStock,
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: PagedListView<Product>(
-            key: ValueKey((_query, _unit, _active, _lowStock)),
-            controller: _ctl,
-            load: (page) => context.app.inventory.productsPage(
-              page,
-              search: _query,
-              unit: _unit,
-              active: _active,
-              lowStock: _lowStock,
-            ),
-            errorText: 'حدث خطأ أثناء تحميل الأصناف.',
-            emptyText: 'لا توجد أصناف مطابقة.',
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            itemBuilder: (context, p) => _ProductCard(
-              product: p,
-              onTap: manager
-                  ? () => _open(ProductPurchasesScreen(id: p.id))
-                  : () => _showDetails(context, p),
-              onEdit: manager ? () => _open(ProductFormScreen(id: p.id)) : null,
-              onReceive: manager && p.isActive
-                  ? () => _open(PurchaseScreen(productId: p.id))
-                  : null,
-              onDelete: manager ? () => _delete(p) : null,
+              errorText: 'حدث خطأ أثناء تحميل الأصناف.',
+              emptyText: 'لا توجد أصناف مطابقة.',
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+              itemBuilder: (context, p) => _ProductCard(
+                product: p,
+                onTap: manager
+                    ? () => _open(ProductPurchasesScreen(id: p.id))
+                    : () => _showDetails(context, p),
+                onEdit: manager
+                    ? () => _open(ProductFormScreen(id: p.id))
+                    : null,
+                onReceive: manager && p.isActive
+                    ? () => _open(PurchaseScreen(productId: p.id))
+                    : null,
+                onDelete: manager ? () => _delete(p) : null,
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

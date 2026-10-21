@@ -2,6 +2,41 @@ import 'package:flutter/material.dart';
 
 import '../core/api.dart';
 import '../core/theme.dart';
+import 'ui.dart' show SkeletonList;
+
+/// Given by the shell to each tab: it fires when the tab is shown again (or tapped while open).
+class ReloadSignal extends InheritedWidget {
+  const ReloadSignal({super.key, required this.signal, required super.child});
+
+  final Listenable signal;
+
+  @override
+  bool updateShouldNotify(ReloadSignal old) => signal != old.signal;
+}
+
+/// Reloads in place on [ReloadSignal]: the old data stays on screen until the new one arrives.
+mixin ReloadOnShow<W extends StatefulWidget> on State<W> {
+  Listenable? _signal;
+
+  Future<void> reloadInPlace();
+
+  void _onSignal() => reloadInPlace();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final s = context.getInheritedWidgetOfExactType<ReloadSignal>()?.signal;
+    if (s == _signal) return;
+    _signal?.removeListener(_onSignal);
+    _signal = s?..addListener(_onSignal);
+  }
+
+  @override
+  void dispose() {
+    _signal?.removeListener(_onSignal);
+    super.dispose();
+  }
+}
 
 /// Lets a screen reload its data, or replace it with what an action returned.
 class AsyncController<T> {
@@ -32,7 +67,8 @@ class AsyncView<T> extends StatefulWidget {
   State<AsyncView<T>> createState() => _AsyncViewState<T>();
 }
 
-class _AsyncViewState<T> extends State<AsyncView<T>> {
+class _AsyncViewState<T> extends State<AsyncView<T>>
+    with ReloadOnShow<AsyncView<T>> {
   late Future<T> _future = widget.load();
   T? _override;
 
@@ -59,6 +95,9 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
     } catch (_) {} // shown by the FutureBuilder
   }
 
+  @override
+  Future<void> reloadInPlace() => _refresh();
+
   void _set(T value) => setState(() => _override = value);
 
   @override
@@ -82,7 +121,7 @@ class _AsyncViewState<T> extends State<AsyncView<T>> {
               ? RefreshIndicator(onRefresh: _refresh, child: body)
               : body;
         } else {
-          child = const Center(child: CircularProgressIndicator());
+          child = const SkeletonList();
         }
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),

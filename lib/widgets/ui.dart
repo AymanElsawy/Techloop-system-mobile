@@ -541,6 +541,55 @@ class PageHeader extends StatelessWidget {
   }
 }
 
+/// First-load placeholder: pulsing cards shaped like the list that is coming (still when animations are off).
+class SkeletonList extends StatefulWidget {
+  const SkeletonList({super.key});
+
+  @override
+  State<SkeletonList> createState() => _SkeletonListState();
+}
+
+class _SkeletonListState extends State<SkeletonList>
+    with SingleTickerProviderStateMixin {
+  late final _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+    lowerBound: 0.45,
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = context.colors.border.withValues(alpha: 0.7);
+    final list = ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (var i = 0; i < 6; i++)
+          Container(
+            height: 76,
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+      ],
+    );
+    return Semantics(
+      label: 'جاري التحميل',
+      child: MediaQuery.disableAnimationsOf(context)
+          ? list
+          : FadeTransition(opacity: _pulse, child: list),
+    );
+  }
+}
+
 /// Empty list message inside a card.
 class EmptyCard extends StatelessWidget {
   const EmptyCard(this.text, {super.key});
@@ -569,11 +618,15 @@ class ChoiceBar<T> extends StatelessWidget {
     required this.options,
     required this.value,
     required this.onChanged,
+    this.leading,
   });
 
   final Map<T, String> options;
   final T value;
   final ValueChanged<T> onChanged;
+
+  /// Scrolls with the chips, before them (e.g. a [PeriodChip]).
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -581,6 +634,11 @@ class ChoiceBar<T> extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
+          if (leading != null)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: leading,
+            ),
           for (final e in options.entries)
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 8),

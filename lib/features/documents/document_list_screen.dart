@@ -22,16 +22,6 @@ import '../treasury/deposit_details_screen.dart';
 import 'document_pdf_screen.dart';
 import 'purchase_screen.dart';
 
-const _typeTones = {
-  'SALE': Tone.success,
-  'SALE_RETURN': Tone.danger,
-  'COLLECTION': Tone.info,
-  'PURCHASE': Tone.warning,
-  'ISSUE': Tone.neutral,
-  'RETURN': Tone.neutral,
-  'DEPOSIT': Tone.success,
-};
-
 /// App page with the full details of a document; movements have none (the PDF is their details).
 Widget? documentDetailsScreen(String type, String id) => switch (type) {
   'SALE' => InvoiceDetailsScreen(id: id),
@@ -52,8 +42,7 @@ class DocumentListScreen extends StatefulWidget {
 class _DocumentListScreenState extends State<DocumentListScreen> {
   Timer? _debounce;
   String? _type;
-  DateTime? _from;
-  DateTime? _to;
+  DateTimeRange? _period;
   String _query = '';
   int _reload = 0;
 
@@ -70,7 +59,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
       'DEPOSIT' => 'rep',
       _ => null,
     };
-    final id = party == null ? '' : await _pickParty(context, type);
+    final id = party == null ? '' : await pickParty(context, type);
     if (id == null || !mounted) return;
     await push(context, switch (type) {
       'SALE' => InvoiceFormScreen(customerId: id),
@@ -93,97 +82,107 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
       for (final t in documentTypes)
         if (manager || t != 'PURCHASE') t,
     ];
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                decoration: const InputDecoration(
-                  hintText: 'رقم المستند أو الاسم',
-                  prefixIcon: Icon(Icons.search),
-                  isDense: true,
+    return Scaffold(
+      floatingActionButton: manager
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                final type = _type ?? await _pickType(context, types);
+                if (type != null) await _create(type);
+              },
+              icon: const Icon(Icons.add),
+              label: Text(
+                _type == null ? 'مستند جديد' : documentTypeLabels[_type]!,
+              ),
+            )
+          : null,
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'رقم المستند أو الاسم',
+                    prefixIcon: Icon(Icons.search),
+                    isDense: true,
+                  ),
+                  onChanged: (v) {
+                    _debounce?.cancel();
+                    _debounce = Timer(
+                      const Duration(milliseconds: 300),
+                      () => setState(() => _query = v.trim()),
+                    );
+                  },
                 ),
-                onChanged: (v) {
-                  _debounce?.cancel();
-                  _debounce = Timer(
-                    const Duration(milliseconds: 300),
-                    () => setState(() => _query = v.trim()),
-                  );
-                },
-              ),
-              if (manager) ...[
-                if (_type case final type?) ...[
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: () => _create(type),
-                    icon: const Icon(Icons.add),
-                    label: Text('إنشاء ${documentTypeLabels[type]}'),
+                const SizedBox(height: 8),
+                ChoiceBar<String?>(
+                  leading: PeriodChip(
+                    value: _period,
+                    onChanged: (r) => setState(() => _period = r),
                   ),
-                ],
+                  options: {
+                    null: 'الكل',
+                    for (final t in types) t: documentTypeLabels[t]!,
+                  },
+                  value: _type,
+                  onChanged: (v) => setState(() => _type = v),
+                ),
               ],
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: DateField(
-                      label: 'من',
-                      value: _from,
-                      onChanged: (d) => setState(() => _from = d),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: DateField(
-                      label: 'إلى',
-                      value: _to,
-                      onChanged: (d) => setState(() => _to = d),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ChoiceBar<String?>(
-                options: {
-                  null: 'الكل',
-                  for (final t in types) t: documentTypeLabels[t]!,
-                },
-                value: _type,
-                onChanged: (v) => setState(() => _type = v),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: PagedListView<DocumentRow>(
-            key: ValueKey((_type, _from, _to, _query, _reload)),
-            load: (page) => context.app.documents.page(
-              page,
-              type: _type,
-              from: _from == null ? null : isoDay(_from!),
-              to: _to == null ? null : isoDay(_to!),
-              search: _query,
             ),
-            errorText: 'حدث خطأ أثناء تحميل الفواتير.',
-            emptyText: 'مفيش مستندات مطابقة.',
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            // Totals cover every page (from the backend).
-            header: (context, last) {
-              final sum = last.sum ?? 0;
-              return Text(
-                '${last.total} مستند${_type != null && sum > 0 ? ' · الإجمالي (بدون الملغي): ${money(sum)}' : ''}',
-                style: TextStyle(color: context.colors.muted, fontSize: 13),
-              );
-            },
-            itemBuilder: (context, d) => _DocumentCard(doc: d),
           ),
-        ),
-      ],
+          Expanded(
+            child: PagedListView<DocumentRow>(
+              key: ValueKey((_type, _period, _query, _reload)),
+              load: (page) => context.app.documents.page(
+                page,
+                type: _type,
+                from: _period == null ? null : isoDay(_period!.start),
+                to: _period == null ? null : isoDay(_period!.end),
+                search: _query,
+              ),
+              errorText: 'حدث خطأ أثناء تحميل الفواتير.',
+              emptyText: 'مفيش مستندات مطابقة.',
+              // Room for the FAB under the last card.
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+              // Totals cover every page (from the backend).
+              header: (context, last) {
+                final sum = last.sum ?? 0;
+                return Text(
+                  '${last.total} مستند${_type != null && sum > 0 ? ' · الإجمالي (بدون الملغي): ${money(sum)}' : ''}',
+                  style: TextStyle(color: context.colors.muted, fontSize: 13),
+                );
+              },
+              itemBuilder: (context, d) => _DocumentCard(doc: d),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
+
+/// Which document to create when no type filter is picked.
+Future<String?> _pickType(BuildContext context, List<String> types) =>
+    showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final t in types)
+                ListTile(
+                  title: Text(documentTypeLabels[t]!),
+                  onTap: () => Navigator.pop(context, t),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
 
 class _DocumentCard extends StatelessWidget {
   const _DocumentCard({required this.doc});
@@ -199,14 +198,11 @@ class _DocumentCard extends StatelessWidget {
       child: Tile(
         dimmed: d.cancelled,
         title: '${documentTypeLabels[d.type]} ${d.number}',
-        subtitle: [
-          '${documentPartyLabels[d.type]}: ${d.party?.name ?? '—'}',
-          dateTime(d.date),
-          if (d.by != null) d.by!.name,
-        ].dotted(),
+        // Two lines: the type is already in the title, who issued it is in the details / PDF.
+        subtitle: [d.party?.name ?? '—', shortDate(d.date)].dotted(),
         badge: d.cancelled
             ? const StatusBadge('ملغاة', tone: Tone.danger)
-            : StatusBadge(_short(d.type), tone: _typeTones[d.type]!),
+            : null,
         trailing: d.amount != null
             ? money(d.amount!)
             : '${number(d.quantity ?? 0)} قطعة',
@@ -216,20 +212,10 @@ class _DocumentCard extends StatelessWidget {
       ),
     );
   }
-
-  static String _short(String type) => const {
-    'SALE': 'بيع',
-    'SALE_RETURN': 'مرتجع',
-    'COLLECTION': 'تحصيل',
-    'PURCHASE': 'شراء',
-    'ISSUE': 'صرف',
-    'RETURN': 'مرتجع عهدة',
-    'DEPOSIT': 'توريد',
-  }[type]!;
 }
 
 /// Customers (or sales reps for DEPOSIT) to pick from; returns the picked id.
-Future<String?> _pickParty(BuildContext context, String type) =>
+Future<String?> pickParty(BuildContext context, String type) =>
     showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,

@@ -13,11 +13,14 @@ import '../../widgets/ui.dart';
 String _norm(String name) => name.trim().toLowerCase();
 
 class _Line {
-  _Line([this.supplierId]);
+  _Line([String supplierName = ''])
+    : supplier = TextEditingController(text: supplierName);
 
   final name = TextEditingController();
   final focus = FocusNode();
-  String? supplierId;
+  // Typed: a known supplier's name picks it, any other name adds a new supplier.
+  final TextEditingController supplier;
+  final supplierFocus = FocusNode();
   final qty = TextEditingController(text: '1');
   final cost = TextEditingController();
   // New product only.
@@ -25,10 +28,11 @@ class _Line {
   String? unit;
 
   void dispose() {
-    for (final c in [name, qty, cost, price]) {
+    for (final c in [name, supplier, qty, cost, price]) {
       c.dispose();
     }
     focus.dispose();
+    supplierFocus.dispose();
   }
 }
 
@@ -107,8 +111,8 @@ class _Form extends StatefulWidget {
 
 class _FormState extends State<_Form> {
   late final _byName = {for (final p in widget.data.products) _norm(p.name): p};
-  late final _supplierNames = {
-    for (final s in widget.data.suppliers) s.id: s.name,
+  late final _supplierByName = {
+    for (final s in widget.data.suppliers) _norm(s.name): s,
   };
   late String? _warehouseId =
       widget.data.warehouses.any((w) => w.id == widget.warehouseId)
@@ -116,7 +120,11 @@ class _FormState extends State<_Form> {
       : null;
   late final _lines = [
     _Line(
-      _supplierNames.containsKey(widget.supplierId) ? widget.supplierId : null,
+      widget.data.suppliers
+              .where((s) => s.id == widget.supplierId)
+              .firstOrNull
+              ?.name ??
+          '',
     ),
   ];
   final _paid = <String, TextEditingController>{};
@@ -150,6 +158,18 @@ class _FormState extends State<_Form> {
   /// The known product this line's name matches, or null (a new product).
   Product? _match(_Line l) => _byName[_norm(l.name.text)];
 
+  /// The line's supplier: a known one's id, or `new:<name>` for a new one (groups its lines); null until typed.
+  String? _supplierKey(_Line l) {
+    final name = l.supplier.text.trim();
+    if (name.length < 2) return null;
+    return _supplierByName[_norm(name)]?.id ?? 'new:${_norm(name)}';
+  }
+
+  /// Display name per supplier key.
+  String _supplierName(String key) => key.startsWith('new:')
+      ? '${_lines.firstWhere((l) => _supplierKey(l) == key).supplier.text.trim()} (مورد جديد)'
+      : widget.data.suppliers.firstWhere((s) => s.id == key).name;
+
   num _qty(_Line l) => int.tryParse(l.qty.text) ?? 0;
   num _lineTotal(_Line l) => round2(_qty(l) * (num.tryParse(l.cost.text) ?? 0));
   num _grandTotal() =>
@@ -159,10 +179,9 @@ class _FormState extends State<_Form> {
   Map<String, num> get _totals {
     final totals = <String, num>{};
     for (final l in _lines) {
-      if (l.supplierId == null) continue;
-      totals[l.supplierId!] = round2(
-        (totals[l.supplierId!] ?? 0) + _lineTotal(l),
-      );
+      final key = _supplierKey(l);
+      if (key == null) continue;
+      totals[key] = round2((totals[key] ?? 0) + _lineTotal(l));
     }
     return totals;
   }
@@ -179,11 +198,12 @@ class _FormState extends State<_Form> {
   /// The same existing product twice from the same supplier.
   bool _isDuplicate(_Line l) {
     final p = _match(l);
-    if (p == null || l.supplierId == null) return false;
+    final key = _supplierKey(l);
+    if (p == null || key == null) return false;
     final i = _lines.indexOf(l);
     return _lines
         .take(i)
-        .any((x) => x.supplierId == l.supplierId && _match(x)?.id == p.id);
+        .any((x) => _supplierKey(x) == key && _match(x)?.id == p.id);
   }
 
   bool get _canSubmit =>
@@ -191,7 +211,7 @@ class _FormState extends State<_Form> {
       _lines.every(
         (l) =>
             l.name.text.trim().length >= 2 &&
-            l.supplierId != null &&
+            _supplierKey(l) != null &&
             _qty(l) >= 1 &&
             num.tryParse(l.cost.text) != null &&
             (_match(l) != null || num.tryParse(l.price.text) != null) &&
@@ -206,9 +226,10 @@ class _FormState extends State<_Form> {
     if (l.cost.text.isEmpty && p.lastCost != null) {
       l.cost.text = '${p.lastCost}';
     }
-    final supplier = p.supplier?.id ?? p.lastSupplier?.id;
-    if (l.supplierId == null && _supplierNames.containsKey(supplier)) {
-      l.supplierId = supplier;
+    final supplier = p.supplier ?? p.lastSupplier;
+    if (l.supplier.text.trim().isEmpty &&
+        widget.data.suppliers.any((s) => s.id == supplier?.id)) {
+      l.supplier.text = supplier!.name;
     }
   }
 
@@ -231,7 +252,10 @@ class _FormState extends State<_Form> {
                   'price': num.parse(l.price.text),
                   'unit': l.unit,
                 },
-              'supplierId': l.supplierId,
+              if (_supplierKey(l)!.startsWith('new:'))
+                'newSupplier': {'name': l.supplier.text.trim()}
+              else
+                'supplierId': _supplierKey(l),
               'quantity': _qty(l),
               'unitCost': num.parse(l.cost.text),
             },
@@ -239,7 +263,13 @@ class _FormState extends State<_Form> {
         'payments': [
           for (final e in _totals.entries)
             if (_paidOf(e.key).text.trim().isNotEmpty)
-              {'supplierId': e.key, 'paidAmount': _paidAmount(e.key, e.value)},
+              {
+                if (e.key.startsWith('new:'))
+                  'supplierName': e.key.substring(4)
+                else
+                  'supplierId': e.key,
+                'paidAmount': _paidAmount(e.key, e.value),
+              },
         ],
         'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       });
@@ -300,23 +330,31 @@ class _FormState extends State<_Form> {
     );
   }
 
-  Widget _nameField(_Line l) => RawAutocomplete<Product>(
-    textEditingController: l.name,
-    focusNode: l.focus,
-    displayStringForOption: (p) => p.name,
+  /// Typed field with up to 8 suggestions whose name contains the text.
+  Widget _suggest<T extends Object>({
+    required TextEditingController controller,
+    required FocusNode focus,
+    required List<T> all,
+    required String Function(T) name,
+    required String Function(T) label,
+    String? Function(T)? sub,
+    required String hint,
+    VoidCallback? onChanged,
+  }) => RawAutocomplete<T>(
+    textEditingController: controller,
+    focusNode: focus,
+    displayStringForOption: name,
     optionsBuilder: (v) {
       final q = _norm(v.text);
       if (q.isEmpty) return const [];
-      return widget.data.products
-          .where((p) => _norm(p.name).contains(q))
-          .take(8);
+      return all.where((o) => _norm(name(o)).contains(q)).take(8);
     },
-    onSelected: (_) => setState(() => _onPicked(l)),
+    onSelected: (_) => setState(() => onChanged?.call()),
     fieldViewBuilder: (context, controller, focus, _) => TextFormField(
       controller: controller,
       focusNode: focus,
-      decoration: const InputDecoration(hintText: 'اكتب اسم الصنف'),
-      onChanged: (_) => setState(() => _onPicked(l)),
+      decoration: InputDecoration(hintText: hint),
+      onChanged: (_) => setState(() => onChanged?.call()),
     ),
     optionsViewBuilder: (context, onSelected, options) => Align(
       alignment: AlignmentDirectional.topStart,
@@ -329,12 +367,12 @@ class _FormState extends State<_Form> {
             padding: EdgeInsets.zero,
             shrinkWrap: true,
             children: [
-              for (final p in options)
+              for (final o in options)
                 ListTile(
                   dense: true,
-                  title: Text(p.label),
-                  subtitle: Text('الكمية ${number(p.quantity)}'),
-                  onTap: () => onSelected(p),
+                  title: Text(label(o)),
+                  subtitle: sub?.call(o) == null ? null : Text(sub!(o)!),
+                  onTap: () => onSelected(o),
                 ),
             ],
           ),
@@ -382,7 +420,18 @@ class _FormState extends State<_Form> {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: _nameField(l)),
+                        Expanded(
+                          child: _suggest<Product>(
+                            controller: l.name,
+                            focus: l.focus,
+                            all: widget.data.products,
+                            name: (p) => p.name,
+                            label: (p) => p.label,
+                            sub: (p) => 'الكمية ${number(p.quantity)}',
+                            hint: 'اكتب اسم الصنف',
+                            onChanged: () => _onPicked(l),
+                          ),
+                        ),
                         if (_lines.length > 1)
                           IconButton(
                             tooltip: 'حذف السطر ${i + 1}',
@@ -430,13 +479,23 @@ class _FormState extends State<_Form> {
                           ],
                         ),
                       ],
-                    Select<String>(
-                      label: 'المورد',
-                      value: l.supplierId,
-                      hint: 'اختر المورد',
-                      items: _supplierNames,
-                      onChanged: (v) => setState(() => l.supplierId = v),
+                    _suggest<Supplier>(
+                      controller: l.supplier,
+                      focus: l.supplierFocus,
+                      all: widget.data.suppliers,
+                      name: (s) => s.name,
+                      label: (s) => s.name,
+                      sub: (s) => s.phone,
+                      hint: 'اكتب اسم المورد',
                     ),
+                    if (_supplierKey(l)?.startsWith('new:') ?? false)
+                      Text(
+                        'مورد جديد',
+                        style: TextStyle(
+                          color: colors.warningFg,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     Row(
                       children: [
                         Expanded(
@@ -477,7 +536,9 @@ class _FormState extends State<_Form> {
                 OutlinedButton.icon(
                   // A new line keeps the last line's supplier: most invoices are from one supplier.
                   onPressed: () => setState(
-                    () => _lines.add(_Line(_lines.lastOrNull?.supplierId)),
+                    () => _lines.add(
+                      _Line(_lines.lastOrNull?.supplier.text ?? ''),
+                    ),
                   ),
                   icon: const Icon(Icons.add),
                   label: const Text('إضافة صنف'),
@@ -501,12 +562,11 @@ class _FormState extends State<_Form> {
               ),
               for (final e in totals.entries) ...[
                 Input(
-                  label: 'المدفوع لـ ${_supplierNames[e.key] ?? '—'}',
+                  label: 'المدفوع لـ ${_supplierName(e.key)}',
                   controller: _paidOf(e.key),
                   keyboard: Input.decimal,
                   ltr: true,
-                  hint:
-                      '${_supplierNames[e.key] ?? '—'} — الإجمالي ${money(e.value)}',
+                  hint: '${_supplierName(e.key)} — الإجمالي ${money(e.value)}',
                   onChanged: (_) => setState(() {}),
                 ),
                 if (_paidAmount(e.key, e.value) > e.value)

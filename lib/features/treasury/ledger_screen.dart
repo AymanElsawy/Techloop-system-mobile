@@ -23,8 +23,7 @@ class LedgerScreen extends StatefulWidget {
 
 class _LedgerScreenState extends State<LedgerScreen> {
   String _method = '';
-  DateTime? _from;
-  DateTime? _to;
+  DateTimeRange? _period;
 
   Widget? _target(LedgerRow r) => switch (r.refType) {
     'DEPOSIT' => DepositDetailsScreen(id: r.refId!),
@@ -44,49 +43,29 @@ class _LedgerScreenState extends State<LedgerScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Column(
-              children: [
-                ChoiceBar<String>(
-                  options: {
-                    '': 'الكل',
-                    for (final m in moneyBuckets) m: bucketLabel(m),
-                  },
-                  value: _method,
-                  onChanged: (m) => setState(() => _method = m),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DateField(
-                        label: 'من',
-                        value: _from,
-                        onChanged: (d) => setState(() => _from = d),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DateField(
-                        label: 'إلى',
-                        value: _to,
-                        onChanged: (d) => setState(() => _to = d),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+            child: ChoiceBar<String>(
+              leading: PeriodChip(
+                value: _period,
+                onChanged: (r) => setState(() => _period = r),
+              ),
+              options: {
+                '': 'الكل',
+                for (final m in moneyBuckets) m: bucketLabel(m),
+              },
+              value: _method,
+              onChanged: (m) => setState(() => _method = m),
             ),
           ),
           Expanded(
             child: PagedListView<LedgerRow>(
               key: ValueKey(
-                '$_method|$_from|$_to',
+                '$_method|$_period',
               ), // new filters: reload from page 1
               load: (page) => context.app.treasury.ledger(
                 page,
                 method: _method.isEmpty ? null : _method,
-                from: _from == null ? null : isoDay(_from!),
-                to: _to == null ? null : isoDay(_to!),
+                from: _period == null ? null : isoDay(_period!.start),
+                to: _period == null ? null : isoDay(_period!.end),
               ),
               emptyText: 'مفيش حركة في الفترة دي.',
               errorText: 'حدث خطأ أثناء تحميل الحركة.',

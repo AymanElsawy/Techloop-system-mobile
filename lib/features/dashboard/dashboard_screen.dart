@@ -4,9 +4,19 @@ import '../../core/format.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../data/models/treasury.dart';
+import '../../widgets/async_view.dart' show ReloadOnShow;
+import '../../widgets/ui.dart' show SkeletonList, push;
+import '../customers/customer_list_screen.dart';
+import '../documents/document_list_screen.dart' show pickParty;
+import '../inventory/product_list.dart';
+import '../sales/collection_form_screen.dart';
+import '../sales/invoice_form_screen.dart';
+import '../treasury/treasury_screen.dart';
+import '../users/targets_screen.dart';
+import '../visits/visit_form_screen.dart';
 import 'dashboard.dart';
 
-/// Home tab: everything at a glance. Reps see their own numbers first (today's visits, cash box, custody).
+/// Home tab: 4 numbers, what needs attention (only non-zero), then النهارده / الشهر / المناديب tabs.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.session});
 
@@ -16,7 +26,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with ReloadOnShow<DashboardScreen> {
   late Future<Dashboard> _future = _load();
 
   Future<Dashboard> _load() async => Dashboard.fromJson(
@@ -32,6 +43,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
+  Future<void> reloadInPlace() => _refresh();
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<Dashboard>(
       future: _future,
@@ -40,12 +54,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (snap.hasData) {
           child = RefreshIndicator(
             onRefresh: _refresh,
-            child: _Content(d: snap.data!, user: widget.session.user!),
+            child: _Content(
+              d: snap.data!,
+              user: widget.session.user!,
+              onChanged: _refresh,
+            ),
           );
         } else if (snap.hasError) {
           child = _Error(message: snap.error.toString(), onRetry: _refresh);
         } else {
-          child = const Center(child: CircularProgressIndicator());
+          child = const SkeletonList();
         }
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
@@ -56,195 +74,214 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-class _Content extends StatelessWidget {
-  const _Content({required this.d, required this.user});
+enum _Tab {
+  today('النهارده'),
+  month('الشهر'),
+  reps('المناديب');
+
+  const _Tab(this.label);
+  final String label;
+}
+
+class _Content extends StatefulWidget {
+  const _Content({
+    required this.d,
+    required this.user,
+    required this.onChanged,
+  });
 
   final Dashboard d;
   final User user;
 
+  /// After a quick action's form closes.
+  final Future<void> Function() onChanged;
+
+  @override
+  State<_Content> createState() => _ContentState();
+}
+
+class _ContentState extends State<_Content> {
+  var _tab = _Tab.today;
+
+  /// Tab screens have no app bar of their own.
+  void _open(String title, Widget body) => push(
+    context,
+    Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: body,
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
-    final manager = user.isManager;
+    final d = widget.d;
+    final manager = widget.user.isManager;
     final c = context.colors;
+    final tabs = [
+      _Tab.today,
+      _Tab.month,
+      if (d.reps?.isNotEmpty ?? false) _Tab.reps,
+    ];
+    final tab = tabs.contains(_tab) ? _tab : _Tab.today;
+    final repsWithCash = d.reps?.where((r) => r.cashHeld > 0).length ?? 0;
+    final lowStock = d.stock?.lowStock ?? const [];
+
+    final alerts = [
+      if (d.treasury case final t? when t.withReps > 0)
+        _Alert(
+          title: '${money(t.withReps)} مع المناديب',
+          subtitle: '$repsWithCash مندوب لسه ماسلّمش للخزنة',
+          onTap: () => _open('الخزنة', const TreasuryScreen()),
+        ),
+      if (d.cheques.isNotEmpty)
+        _Alert(
+          title: '${d.cheques.length} شيك مستحق خلال 14 يوم',
+          subtitle: 'أقربهم ${_dueIn(d.cheques.first.dueDate)}',
+          onTap: () => setState(() => _tab = _Tab.today),
+        ),
+      if (manager && d.pendingApproval > 0)
+        _Alert(
+          title: '${d.pendingApproval} عميل بانتظار الموافقة',
+          onTap: () => _open('العملاء', const CustomerListScreen()),
+        ),
+      if (lowStock.isNotEmpty)
+        _Alert(
+          title: '${lowStock.length} صنف تحت الحد الأدنى',
+          subtitle:
+              lowStock.take(3).map((p) => p.name).join('، ') +
+              (lowStock.length > 3 ? ' …' : ''),
+          onTap: () => _open('الأصناف', const ProductList()),
+        ),
+    ];
 
     final sections = <Widget>[
-      _Greeting(name: user.name),
-      // Reps start the day from their visit list.
-      if (!manager) _VisitsCard(d: d, showRep: false),
+      _Greeting(name: widget.user.name),
+      if (widget.user.role == UserRole.salesRep)
+        _QuickActions(onDone: widget.onChanged),
       _Grid(
         children: [
           _Stat(
-            label: 'مبيعات اليوم',
-            value: money(d.salesToday.total),
-            hint: '${d.salesToday.count} فاتورة',
-          ),
-          _Stat(
             label: 'مبيعات الشهر',
             value: money(d.salesMonth.total),
-            hint: '${d.salesMonth.count} فاتورة',
+            hint:
+                '${d.salesMonth.count} فاتورة · اليوم ${money(d.salesToday.total)}',
           ),
           _Stat(
             label: 'المحصّل هذا الشهر',
             value: money(d.collectedMonth),
-            hint: 'اليوم: ${money(d.collectedToday)}',
+            hint: 'اليوم ${money(d.collectedToday)}',
           ),
           _Stat(
             label: manager ? 'مديونية العملاء' : 'مديونية عملائي',
+            onTap: () => _open('العملاء', const CustomerListScreen()),
             value: money(d.debt),
             valueColor: c.danger,
             hint:
                 '${d.debtors} عميل مدين${d.pendingPayments > 0 ? ' · تحت التسليم ${money(d.pendingPayments)}' : ''}',
           ),
-        ],
-      ),
-      if (d.cashBox case final box?)
-        _Highlight(
-          label: 'خزنتي (لم تُسلَّم)',
-          value: money(box.total),
-          lines: ['${box.count} مستند'],
-        ),
-      if (d.treasury case final t?)
-        _Highlight(
-          label: 'رصيد الخزنة',
-          value: money(t.total),
-          lines: [
-            for (final m in t.byMethod)
-              '${bucketLabel(m.method)}: ${money(m.total)}',
-          ],
-        ),
-      _Grid(
-        children: [
-          if (d.custody case final cu?)
-            _Stat(
-              label: 'عهدتي',
-              value: number(cu.quantity),
-              hint: '${cu.items} صنف',
-            ),
           if (d.treasury case final t?)
             _Stat(
-              label: 'مع المناديب',
-              value: money(t.withReps),
-              valueColor: t.withReps > 0 ? c.danger : null,
-              hint: 'لم تُسلَّم للخزنة',
+              label: 'رصيد الخزنة',
+              onTap: () => _open('الخزنة', const TreasuryScreen()),
+              value: money(t.total),
+              highlight: true,
+              hint: [
+                for (final m in t.byMethod)
+                  '${bucketLabel(m.method)} ${money(m.total)}',
+              ].join(' · '),
             ),
-          if (d.stock case final s?)
+          if (d.cashBox case final box?)
             _Stat(
-              label: 'قيمة المخزون',
-              value: money(s.value),
-              hint: '${s.products} صنف · ${s.lowStock.length} ناقص',
-              hintColor: s.lowStock.isNotEmpty ? c.danger : null,
+              label: 'خزنتي (لم تُسلَّم)',
+              onTap: () => _open('خزنتي', const TreasuryScreen()),
+              value: money(box.total),
+              highlight: true,
+              hint: '${box.count} مستند',
             ),
-          _Stat(
-            label: 'زيارات اليوم',
-            value: '${d.visitsTodayCount}',
-            hint:
-                'مكتملة ${d.visitsToday['COMPLETED'] ?? 0} · باقي ${d.visitsLeft} · الشهر ${d.visitsMonthCompleted}',
+        ],
+      ),
+      _Section(
+        title: 'محتاج متابعة',
+        empty: 'كله تمام ✓ مفيش حاجة محتاجة متابعة.',
+        children: alerts,
+      ),
+      SegmentedButton<_Tab>(
+        showSelectedIcon: false,
+        segments: [
+          for (final t in tabs) ButtonSegment(value: t, label: Text(t.label)),
+        ],
+        selected: {tab},
+        onSelectionChanged: (s) => setState(() => _tab = s.first),
+      ),
+      ...switch (tab) {
+        _Tab.today => [
+          if (d.visits.isNotEmpty || !manager)
+            _VisitsCard(d: d, showRep: manager),
+          if (d.cheques.isNotEmpty)
+            _Section(
+              title: 'شيكات مستحقة خلال 14 يوم',
+              empty: '',
+              children: [
+                for (final ch in d.cheques)
+                  _Row(
+                    title: ch.customer,
+                    subtitle:
+                        'شيك ${ch.chequeNumber ?? '—'} · ${dayMonth(ch.dueDate)}${ch.withRep ? ' · مع المندوب' : ''}',
+                    trailing: money(ch.amount),
+                    trailingHint: _dueIn(ch.dueDate),
+                  ),
+              ],
+            ),
+          if (d.visits.isEmpty && d.cheques.isEmpty && manager)
+            _Section(
+              title: 'النهارده',
+              empty: 'مفيش زيارات ولا شيكات النهارده.',
+              children: const [],
+            ),
+        ],
+        _Tab.month => [
+          _MonthChart(daily: d.daily),
+          if (d.topDebtors.isNotEmpty)
+            _Section(
+              title: 'أعلى المديونيات',
+              empty: '',
+              children: [
+                for (final t in d.topDebtors)
+                  _Row(
+                    title: t.name,
+                    subtitle: t.governorate,
+                    trailing: money(t.debit),
+                    trailingColor: c.danger,
+                  ),
+              ],
+            ),
+        ],
+        _Tab.reps => [
+          _Section(
+            title: 'أعلى المناديب هذا الشهر',
+            empty: '',
+            children: [
+              for (final r in ([
+                ...d.reps!,
+              ]..sort((a, b) => b.sales.compareTo(a.sales))).take(5))
+                _RepRow(
+                  name: r.name,
+                  sales: r.sales,
+                  cashHeld: r.cashHeld,
+                  progress: r.salesProgress ?? r.yearSalesProgress,
+                  yearly: r.salesProgress == null,
+                ),
+            ],
           ),
-          if (manager)
-            _Stat(
-              label: 'العملاء',
-              value: '${d.customersTotal}',
-              hint: '${d.pendingApproval} بانتظار الموافقة',
-              hintColor: d.pendingApproval > 0 ? c.warningFg : null,
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton(
+              onPressed: () => _open('التارجت', const TargetsScreen()),
+              child: const Text('عرض الكل ‹'),
             ),
-          if (d.suppliers case final s?)
-            _Stat(
-              label: 'مديونية الموردين',
-              value: money(s.debt),
-              valueColor: s.debt > 0 ? c.danger : null,
-              hint: '${s.count} مورد مدين له',
-            ),
+          ),
         ],
-      ),
-      _MonthChart(daily: d.daily),
-      if (manager) _VisitsCard(d: d, showRep: true),
-      _Section(
-        title: 'شيكات مستحقة خلال 14 يوم',
-        empty: 'مفيش شيكات مستحقة قريب.',
-        children: [
-          for (final ch in d.cheques)
-            _Row(
-              title: ch.customer,
-              subtitle:
-                  'شيك ${ch.chequeNumber ?? '—'} · ${dayMonth(ch.dueDate)}${ch.withRep ? ' · مع المندوب' : ''}',
-              trailing: money(ch.amount),
-              trailingHint: _dueIn(ch.dueDate),
-            ),
-        ],
-      ),
-      if (d.reps case final reps?)
-        _Section(
-          title: 'أداء المناديب هذا الشهر',
-          empty: 'مفيش مناديب نشطين.',
-          children: [
-            for (final r in reps)
-              _Row(
-                title: r.name,
-                subtitle: [
-                  'تحصيل ${money(r.collected)} · زيارات ${r.visitsCompleted}',
-                  if (r.salesProgress != null)
-                    'تارجت المبيعات ${number(r.salesProgress!)}%',
-                  if (r.collectionProgress != null)
-                    'التحصيل ${number(r.collectionProgress!)}%',
-                  if (r.yearSalesProgress != null)
-                    'مبيعات السنة ${number(r.yearSalesProgress!)}%',
-                  if (r.yearCollectionProgress != null)
-                    'تحصيل السنة ${number(r.yearCollectionProgress!)}%',
-                  if (r.commission != 0) 'عمولة ${money(r.commission)}',
-                ].join(' · '),
-                trailing: money(r.sales),
-                trailingHint: r.cashHeld > 0
-                    ? 'معه ${money(r.cashHeld)}'
-                    : null,
-                trailingHintColor: c.danger,
-              ),
-          ],
-        ),
-      _Section(
-        title: 'أعلى المديونيات',
-        empty: 'مفيش مديونيات.',
-        children: [
-          for (final t in d.topDebtors)
-            _Row(
-              title: t.name,
-              subtitle: t.governorate,
-              trailing: money(t.debit),
-              trailingColor: c.danger,
-            ),
-        ],
-      ),
-      _Section(
-        title: 'آخر الفواتير',
-        empty: 'مفيش فواتير لسه.',
-        children: [
-          for (final i in d.recentInvoices)
-            _Row(
-              title: i.cancelled ? '${i.customer} (ملغاة)' : i.customer,
-              subtitle:
-                  '#${i.number} · ${dayMonth(i.createdAt)} ${time(i.createdAt)}${manager ? ' · ${i.by}' : ''}',
-              trailing: money(i.total),
-              trailingHint: !i.cancelled && i.remaining > 0
-                  ? 'باقي ${money(i.remaining)}'
-                  : null,
-              trailingHintColor: c.danger,
-            ),
-        ],
-      ),
-      if (d.stock case final s? when s.lowStock.isNotEmpty)
-        _Section(
-          title: 'نواقص المخزون',
-          titleColor: c.danger,
-          empty: '',
-          children: [
-            for (final p in s.lowStock)
-              _Row(
-                title: p.name,
-                subtitle: 'الحد الأدنى ${number(p.minQuantity)}',
-                trailing: number(p.quantity),
-                trailingColor: c.danger,
-              ),
-          ],
-        ),
+      },
     ];
 
     return ListView.separated(
@@ -255,21 +292,91 @@ class _Content extends StatelessWidget {
       itemBuilder: (_, i) => sections[i],
     );
   }
+}
 
-  static String _dueIn(DateTime due) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final l = due.toLocal();
-    final days = DateTime(l.year, l.month, l.day).difference(today).inDays;
-    return switch (days) {
-      0 => 'النهارده',
-      1 => 'بكرة',
-      _ => 'بعد $days يوم',
-    };
-  }
+String _dueIn(DateTime due) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final l = due.toLocal();
+  final days = DateTime(l.year, l.month, l.day).difference(today).inDays;
+  return switch (days) {
+    0 => 'النهارده',
+    1 => 'بكرة',
+    _ => 'بعد $days يوم',
+  };
 }
 
 // ---------- building blocks ----------
+
+/// A rep's most used actions, one tap from home.
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.onDone});
+
+  final Future<void> Function() onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    Future<void> open(Widget? screen) async {
+      if (screen == null) return;
+      await push(context, screen);
+      await onDone();
+    }
+
+    Future<void> forCustomer(
+      String type,
+      Widget Function(String id) screen,
+    ) async {
+      final id = await pickParty(context, type);
+      if (id != null && context.mounted) await open(screen(id));
+    }
+
+    return Row(
+      children: [
+        for (final (label, icon, onTap) in [
+          (
+            'زيارة جديدة',
+            Icons.event_available_outlined,
+            () => open(const VisitFormScreen()),
+          ),
+          (
+            'فاتورة بيع',
+            Icons.receipt_long_outlined,
+            () =>
+                forCustomer('SALE', (id) => InvoiceFormScreen(customerId: id)),
+          ),
+          (
+            'تحصيل',
+            Icons.payments_outlined,
+            () => forCustomer(
+              'COLLECTION',
+              (id) => CollectionFormScreen(customerId: id),
+            ),
+          ),
+        ])
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FilledButton(
+                onPressed: onTap,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  minimumSize: const Size(0, 76),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 26),
+                    const SizedBox(height: 4),
+                    Text(label, maxLines: 1),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 class _Greeting extends StatelessWidget {
   const _Greeting({required this.name});
@@ -327,45 +434,99 @@ class _Stat extends StatelessWidget {
     required this.value,
     this.hint,
     this.valueColor,
-    this.hintColor,
+    this.highlight = false,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final String? hint;
   final Color? valueColor;
-  final Color? hintColor;
+
+  /// Dark card for the money that matters most (treasury / the rep's cash box).
+  final bool highlight;
+
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final muted = highlight ? c.onHighlight.withValues(alpha: 0.75) : c.muted;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(color: c.muted, fontSize: 13)),
-            const SizedBox(height: 6),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: valueColor,
+      color: highlight ? c.highlight : null,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(color: muted, fontSize: 13)),
+              const SizedBox(height: 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: highlight ? c.onHighlight : valueColor,
+                  ),
                 ),
               ),
-            ),
-            if (hint != null)
-              Text(
-                hint!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: hintColor ?? c.muted),
+              if (hint != null)
+                Text(
+                  hint!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: muted),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One "محتاج متابعة" line; opens where it can be handled.
+class _Alert extends StatelessWidget {
+  const _Alert({required this.title, this.subtitle, required this.onTap});
+
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: c.muted),
+                    ),
+                ],
               ),
+            ),
+            Icon(Icons.chevron_left, size: 20, color: c.muted),
           ],
         ),
       ),
@@ -373,54 +534,100 @@ class _Stat extends StatelessWidget {
   }
 }
 
-/// Dark card for the money that matters most (treasury / the rep's cash box).
-class _Highlight extends StatelessWidget {
-  const _Highlight({
-    required this.label,
-    required this.value,
-    required this.lines,
+/// A rep in one glance: sales, target bar (monthly, else yearly), cash not handed over.
+class _RepRow extends StatelessWidget {
+  const _RepRow({
+    required this.name,
+    required this.sales,
+    required this.cashHeld,
+    required this.progress,
+    required this.yearly,
   });
 
-  final String label;
-  final String value;
-  final List<String> lines;
+  final String name;
+  final num sales;
+  final num cashHeld;
+  final int? progress;
+  final bool yearly;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final dim = c.onHighlight.withValues(alpha: 0.75);
-    return Card(
-      color: c.highlight,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(color: dim)),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      color: c.onHighlight,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
+    final p = progress;
+    final color = p == null
+        ? c.muted
+        : p >= 50
+        ? c.chartCollected
+        : c.danger;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Text(
+                money(sales),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              if (p == null)
+                Expanded(
+                  child: Text(
+                    'بدون تارجت',
+                    style: TextStyle(fontSize: 12, color: c.muted),
+                  ),
+                )
+              else ...[
+                Expanded(
+                  child: Semantics(
+                    label: yearly ? 'تارجت مبيعات السنة' : 'تارجت المبيعات',
+                    value: '$p%',
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (p / 100).clamp(0, 1).toDouble(),
+                        minHeight: 6,
+                        color: color,
+                        backgroundColor: c.border,
+                      ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (final l in lines)
-                  Text(l, style: TextStyle(color: dim, fontSize: 12)),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${yearly ? 'السنة ' : ''}${number(p)}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
-            ),
-          ],
-        ),
+              if (cashHeld > 0) ...[
+                const SizedBox(width: 10),
+                Text(
+                  'معاه ${money(cashHeld)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: c.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -455,13 +662,11 @@ class _Section extends StatelessWidget {
     required this.title,
     required this.empty,
     required this.children,
-    this.titleColor,
   });
 
   final String title;
   final String empty;
   final List<Widget> children;
-  final Color? titleColor;
 
   @override
   Widget build(BuildContext context) {
@@ -475,11 +680,7 @@ class _Section extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Text(
               title,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-                color: titleColor,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
             ),
           ),
           Divider(height: 1, color: c.border),
@@ -510,7 +711,6 @@ class _Row extends StatelessWidget {
     this.trailing,
     this.trailingHint,
     this.trailingColor,
-    this.trailingHintColor,
     this.badge,
   });
 
@@ -519,7 +719,6 @@ class _Row extends StatelessWidget {
   final String? trailing;
   final String? trailingHint;
   final Color? trailingColor;
-  final Color? trailingHintColor;
   final String? badge;
 
   @override
@@ -567,10 +766,7 @@ class _Row extends StatelessWidget {
                 if (trailingHint != null)
                   Text(
                     trailingHint!,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: trailingHintColor ?? c.muted,
-                    ),
+                    style: TextStyle(fontSize: 11.5, color: c.muted),
                   ),
               ],
             ),

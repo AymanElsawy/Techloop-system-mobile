@@ -205,6 +205,45 @@ class DateField extends StatelessWidget {
   }
 }
 
+/// One chip for a from / to filter (instead of two date fields): "الفترة", or the picked range with ✕.
+class PeriodChip extends StatelessWidget {
+  const PeriodChip({super.key, required this.value, required this.onChanged});
+
+  final DateTimeRange? value;
+  final ValueChanged<DateTimeRange?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = value;
+    Future<void> pick() async {
+      final now = DateTime.now();
+      final picked = await showDateRangePicker(
+        context: context,
+        initialDateRange: r,
+        firstDate: DateTime(now.year - 5),
+        // Filters look back, so the picker opens on this month with older months above.
+        lastDate: DateTime(now.year, now.month, now.day),
+      );
+      if (picked != null) onChanged(picked);
+    }
+
+    return InputChip(
+      avatar: const Icon(Icons.date_range_outlined, size: 18),
+      label: Text(
+        r == null
+            ? 'الفترة'
+            // Isolates keep "from – to" in order inside RTL text.
+            : '\u2068${shortDate(r.start)}\u2069 – \u2068${shortDate(r.end)}\u2069',
+      ),
+      selected: r != null,
+      showCheckmark: false,
+      onPressed: pick,
+      onDeleted: r == null ? null : () => onChanged(null),
+      deleteButtonTooltipMessage: 'مسح',
+    );
+  }
+}
+
 /// Full-width primary button with a spinner while [loading].
 class SubmitButton extends StatelessWidget {
   const SubmitButton({

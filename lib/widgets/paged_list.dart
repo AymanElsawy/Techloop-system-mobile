@@ -40,7 +40,8 @@ class PagedListView<T> extends StatefulWidget {
   State<PagedListView<T>> createState() => _PagedListViewState<T>();
 }
 
-class _PagedListViewState<T> extends State<PagedListView<T>> {
+class _PagedListViewState<T> extends State<PagedListView<T>>
+    with ReloadOnShow<PagedListView<T>> {
   final _items = <T>[];
   PageOf<T>? _last;
   int _pages = 0;
@@ -83,6 +84,9 @@ class _PagedListViewState<T> extends State<PagedListView<T>> {
     }
   }
 
+  @override
+  Future<void> reloadInPlace() => _refresh();
+
   /// ponytail: a page still loading at the same time is dropped by the [_loading] guard, fine for one user scrolling.
   Future<void> _refresh() async {
     if (_loading) return;
@@ -117,9 +121,7 @@ class _PagedListViewState<T> extends State<PagedListView<T>> {
       if (_error != null) {
         return ErrorState(message: _errorMessage, onRetry: _loadMore);
       }
-      if (_last == null) {
-        return const Center(child: CircularProgressIndicator());
-      }
+      if (_last == null) return const SkeletonList();
       return RefreshIndicator(
         onRefresh: _refresh,
         child: PageList(
