@@ -211,16 +211,17 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
         notes: d.notes,
         signatures: ('توقيع المندوب', 'توقيع المستلم'),
       );
-    default: // PURCHASE / ISSUE / RETURN
+    default: // PURCHASE / SUPPLIER_RETURN / ISSUE / RETURN
       final m = await app.inventory.movement(id);
-      final purchase = type == 'PURCHASE';
+      final supplierReturn = type == 'SUPPLIER_RETURN';
+      final purchase = type == 'PURCHASE' || supplierReturn;
       final qty = m.items.fold<num>(0, (s, i) => s + i.quantity);
       final sup = m.supplier;
       return PrintDoc(
         title: title,
         number: '${m.number ?? '—'}',
         date: m.createdAt,
-        cancelled: null,
+        cancelled: m.cancelledAt == null ? null : (m.cancelReason ?? ''),
         partyLabel: purchase
             ? 'المورد'
             : (type == 'ISSUE' ? 'صُرف إلى المندوب' : 'مرتجع من المندوب'),
@@ -248,14 +249,18 @@ Future<PrintDoc> loadPrintDoc(AppScope app, String type, String id) async {
         ],
         totals: [
           ('إجمالي الكمية', number(qty)),
-          if (purchase) ...[
+          if (supplierReturn)
+            ('إجمالي المرتجع (يخصم من مديونية المورد)', money(m.totalCost))
+          else if (purchase) ...[
             ('إجمالي الفاتورة', money(m.totalCost)),
             ('المدفوع', money(m.paid)),
             ('المتبقي (مديونية للمورد)', money(m.remaining)),
           ],
         ],
         notes: m.notes,
-        signatures: purchase
+        signatures: supplierReturn
+            ? ('توقيع أمين المخزن', 'توقيع المستلم (المورد)')
+            : purchase
             ? ('توقيع المورد', 'توقيع أمين المخزن')
             : ('توقيع المندوب', 'توقيع أمين المخزن'),
       );

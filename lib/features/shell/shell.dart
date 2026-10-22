@@ -115,8 +115,8 @@ final _tabs = [
     isNotifications: true,
   ),
   _Tab(
-    'التارجت',
-    Icons.track_changes_outlined,
+    'المناديب',
+    Icons.badge_outlined,
     (_) => const TargetsScreen(),
     managersOnly: true,
   ),

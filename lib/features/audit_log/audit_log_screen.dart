@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../documents/document_pdf_screen.dart';
 import '../../core/app_scope.dart';
 import '../../core/format.dart';
 import '../../core/theme.dart';
@@ -14,6 +15,7 @@ import '../sales/return_details_screen.dart';
 import '../suppliers/supplier_details_screen.dart';
 
 const _actionLabels = {
+  'CREATE': 'سجّل',
   'CANCEL': 'ألغى',
   'UPDATE': 'عدّل',
   'DELETE': 'حذف',
@@ -26,6 +28,7 @@ const auditEntityLabels = {
   'INVOICE': 'فاتورة بيع',
   'COLLECTION': 'تحصيل',
   'RETURN': 'مرتجع',
+  'SUPPLIER_RETURN': 'مرتجع مورد',
   'TREASURY_ENTRY': 'حركة خزنة',
   'SUPPLIER_PAYMENT': 'دفعة مورد',
   'CUSTOMER': 'عميل',
@@ -130,6 +133,10 @@ class _AuditCard extends StatelessWidget {
           'INVOICE' => InvoiceDetailsScreen(id: a.docId),
           'COLLECTION' => CollectionDetailsScreen(id: a.docId),
           'RETURN' => ReturnDetailsScreen(id: a.docId),
+          'SUPPLIER_RETURN' => DocumentPdfScreen(
+            type: 'SUPPLIER_RETURN',
+            id: a.docId,
+          ),
           'SUPPLIER_PAYMENT' => SupplierDetailsScreen(id: a.docId),
           'CUSTOMER' => CustomerDetailsScreen(id: a.docId),
           'SUPPLIER' => SupplierDetailsScreen(id: a.docId),

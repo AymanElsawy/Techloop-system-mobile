@@ -57,6 +57,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
     final party = switch (type) {
       'SALE' || 'SALE_RETURN' || 'COLLECTION' => 'customer',
       'DEPOSIT' => 'rep',
+      'SUPPLIER_RETURN' => 'supplier',
       _ => null,
     };
     final id = party == null ? '' : await pickParty(context, type);
@@ -67,6 +68,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
       'COLLECTION' => CollectionFormScreen(customerId: id),
       'DEPOSIT' => HandoverScreen(repId: id),
       'PURCHASE' => const PurchaseScreen(),
+      'SUPPLIER_RETURN' => StockMoveScreen(type: type, supplierId: id),
       _ => StockMoveScreen(
         type: type,
       ), // ISSUE / RETURN: warehouse picked in the form
@@ -77,10 +79,10 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
   @override
   Widget build(BuildContext context) {
     final manager = context.isManager;
-    // Reps never see purchases.
+    // Reps never see purchases or supplier returns.
     final types = [
       for (final t in documentTypes)
-        if (manager || t != 'PURCHASE') t,
+        if (manager || (t != 'PURCHASE' && t != 'SUPPLIER_RETURN')) t,
     ];
     return Scaffold(
       floatingActionButton: manager
@@ -236,9 +238,16 @@ class _PartyPickerState extends State<_PartyPicker> {
   String _query = '';
 
   bool get _rep => widget.type == 'DEPOSIT';
+  bool get _supplier => widget.type == 'SUPPLIER_RETURN';
 
   Future<List<({String id, String name, String? hint})>> _load() async {
     final app = context.app;
+    if (_supplier) {
+      return [
+        for (final s in await app.inventory.suppliers())
+          (id: s.id, name: s.name, hint: s.company),
+      ];
+    }
     if (_rep) {
       return [
         for (final u in await app.users.list())
@@ -264,7 +273,11 @@ class _PartyPickerState extends State<_PartyPicker> {
             child: TextField(
               autofocus: true,
               decoration: InputDecoration(
-                hintText: _rep ? 'اختر المندوب' : 'اختر العميل',
+                hintText: _rep
+                    ? 'اختر المندوب'
+                    : _supplier
+                    ? 'اختر المورد'
+                    : 'اختر العميل',
                 prefixIcon: const Icon(Icons.search),
                 isDense: true,
               ),

@@ -97,6 +97,7 @@ void main() {
       'rep': {'id': '1', 'name': 'Mika', 'sales': 200, 'returns': 100, 'netSales': 100, 'collected': 2500},
       'invoices': [
         {
+          'id': 'i1',
           'invoiceNumber': '12333',
           'customer': {'name': 'Ayman'},
           'total': 200,
@@ -108,6 +109,7 @@ void main() {
       ],
       'returns': [
         {
+          'id': 'r1',
           'number': 1,
           'invoice': {'invoiceNumber': '12333'},
           'customer': {'name': 'Ayman'},
@@ -117,6 +119,7 @@ void main() {
       ],
       'collections': [
         {
+          'id': 'c1',
           'receiptNumber': '665576',
           'customer': {'name': 'Ayman'},
           'amount': 2500,
@@ -125,8 +128,31 @@ void main() {
           'createdAt': '2026-09-28T15:08:25.398Z',
         },
       ],
+      'visits': [
+        {
+          'id': 'v1',
+          'customer': {'name': 'Ayman'},
+          'purpose': 'SALE',
+          'status': 'COMPLETED',
+          'scheduledAt': '2026-09-27T09:00:00.000Z',
+        },
+      ],
+      'expenses': [
+        {'amount': 50, 'category': 'بنزين', 'notes': null, 'depositStatus': 'PENDING', 'createdAt': '2026-09-27T10:00:00.000Z'},
+      ],
+      'warehouse': {'id': 'w1', 'name': 'مخزن القاهرة'},
+      'custody': [
+        {'quantity': 2, 'product': {'name': 'دواء', 'unit': 'LITER', 'price': 100}},
+      ],
+      'cashBox': {'total': 2450, 'cash': 0, 'expenses': 50, 'count': 1},
+      'governorates': ['القاهرة'],
     });
     expect(d.rep.sales, 200);
+    expect(d.invoices.single.id, 'i1');
+    expect(d.visits.single.status, 'COMPLETED');
+    expect(d.expenses.single.pending, isTrue);
+    expect(d.custody.single.value, 200);
+    expect((d.warehouse, d.cashTotal), ('مخزن القاهرة', 2450));
     expect(d.invoices.single.paid, 0);
     expect(d.returns.single.detail, '12333');
     expect(d.collections.single.detail, contains('مرتد'));

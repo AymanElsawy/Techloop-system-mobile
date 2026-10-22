@@ -74,6 +74,8 @@ const movementTypes = [
   'SALE_RETURN_CANCEL',
   'ADJUST',
   'TRANSFER',
+  'SUPPLIER_RETURN',
+  'SUPPLIER_RETURN_CANCEL',
 ];
 const movementTypeLabels = {
   'RECEIVE': 'وارد للمخزن',
@@ -85,6 +87,8 @@ const movementTypeLabels = {
   'SALE_RETURN_CANCEL': 'إلغاء مرتجع عميل',
   'ADJUST': 'تسوية جرد',
   'TRANSFER': 'تحويل لمخزن',
+  'SUPPLIER_RETURN': 'مرتجع للمورد',
+  'SUPPLIER_RETURN_CANCEL': 'إلغاء مرتجع مورد',
 };
 
 class Warehouse {
@@ -205,13 +209,15 @@ class Movement {
       notes = toStr(j['notes']),
       createdBy = Ref.maybe(j['createdBy']),
       createdAt = toDate(j['createdAt'])!,
+      cancelledAt = toDate(j['cancelledAt']),
+      cancelReason = toStr(j['cancelReason']),
       paidAmount = j['paidAmount'] as num?,
       _totalCost = j['totalCost'] as num?;
 
   final String id;
   final String type;
 
-  /// RECEIVE / ISSUE / RETURN only (printable documents).
+  /// RECEIVE / ISSUE / RETURN / SUPPLIER_RETURN only (printable documents).
   final int? number;
   final Ref? warehouse;
 
@@ -225,7 +231,12 @@ class Movement {
   final Ref? createdBy;
   final DateTime createdAt;
 
+  /// SUPPLIER_RETURN only: set once cancelled.
+  final DateTime? cancelledAt;
+  final String? cancelReason;
+
   /// RECEIVE only: what was actually paid; null means fully paid or a pre-debt record.
+  /// (SUPPLIER_RETURN: null, so [remaining] is 0 and [totalCost] is what came off the debt.)
   final num? paidAmount;
   final num? _totalCost;
 
@@ -236,8 +247,12 @@ class Movement {
   num get remaining => round2(totalCost - paid);
 
   /// Document type of the movement's own print-out (sales print their invoice instead).
-  String? get documentType =>
-      const {'RECEIVE': 'PURCHASE', 'ISSUE': 'ISSUE', 'RETURN': 'RETURN'}[type];
+  String? get documentType => const {
+    'RECEIVE': 'PURCHASE',
+    'ISSUE': 'ISSUE',
+    'RETURN': 'RETURN',
+    'SUPPLIER_RETURN': 'SUPPLIER_RETURN',
+  }[type];
 }
 
 class Supplier {
@@ -431,4 +446,23 @@ class CustodyRequest {
   final DateTime createdAt;
 
   bool get pending => status == 'PENDING';
+}
+
+/// مرتجع للمورد: a product bought from the supplier, what's left of it to return, and its price
+/// (the last price bought from them).
+class Returnable {
+  Returnable.fromJson(Json j)
+    : productId = j['productId'] as String,
+      name = j['name'] as String? ?? '',
+      unitCost = toNum(j['unitCost']),
+      quantity = toNum(j['quantity']),
+      warehouseIds = [...(j['warehouseIds'] as List? ?? []).cast<String>()];
+
+  final String productId;
+  final String name;
+  final num unitCost;
+  final num quantity;
+
+  /// Warehouses it was received into from this supplier.
+  final List<String> warehouseIds;
 }

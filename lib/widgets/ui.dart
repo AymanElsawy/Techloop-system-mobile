@@ -567,6 +567,8 @@ class _SkeletonListState extends State<SkeletonList>
   Widget build(BuildContext context) {
     final color = context.colors.border.withValues(alpha: 0.7);
     final list = ListView(
+      // Sized to its items so it also works nested in a page list (e.g. a section's AsyncView).
+      shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       children: [

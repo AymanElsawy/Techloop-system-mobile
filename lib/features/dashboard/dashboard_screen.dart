@@ -36,7 +36,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _refresh() async {
     final next = _load();
-    setState(() => _future = next);
+    setState(() {
+      _future = next;
+    });
     try {
       await next;
     } catch (_) {} // shown by the FutureBuilder

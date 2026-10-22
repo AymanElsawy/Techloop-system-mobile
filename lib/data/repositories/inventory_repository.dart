@@ -100,14 +100,15 @@ class InventoryRepository {
         await _api.post('/inventory/requests/$id/cancel') as Json,
       );
 
-  /// type: ISSUE | RETURN (need repId) | TRANSFER (toWarehouseId). Receipts use [purchase].
+  /// type: ISSUE | RETURN (need repId) | TRANSFER (toWarehouseId) |
+  /// SUPPLIER_RETURN (supplierId; the server prices it). Receipts use [purchase].
   Future<Movement> move(
     String warehouseId,
     String type,
     Json data,
   ) async => Movement.fromJson(
     await _api.post(
-          '/inventory/warehouses/$warehouseId/${const {'ISSUE': 'issue', 'RETURN': 'return', 'TRANSFER': 'transfer'}[type]}',
+          '/inventory/warehouses/$warehouseId/${const {'ISSUE': 'issue', 'RETURN': 'return', 'TRANSFER': 'transfer', 'SUPPLIER_RETURN': 'supplier-return'}[type]}',
           data,
         )
         as Json,
@@ -194,6 +195,21 @@ class InventoryRepository {
       Supplier.fromJson(await _api.post('/suppliers', data) as Json);
   Future<Supplier> updateSupplier(String id, Json data) async =>
       Supplier.fromJson(await _api.patch('/suppliers/$id', data) as Json);
+
+  /// Goods back into the warehouse, value back on the supplier debt. Managers only.
+  Future<Movement> cancelSupplierReturn(String id, String reason) async =>
+      Movement.fromJson(
+        await _api.post('/inventory/supplier-returns/$id/cancel', {
+              'reason': reason,
+            })
+            as Json,
+      );
+
+  /// مرتجع للمورد: what can still go back to this supplier; the server sets the price.
+  Future<List<Returnable>> returnable(String supplierId) async => toList(
+    await _api.get('/suppliers/$supplierId/returnable'),
+    Returnable.fromJson,
+  );
 
   Future<List<SupplierPayment>> supplierPayments(String supplierId) async =>
       toList(

@@ -10,9 +10,10 @@ import '../../data/models/treasury.dart';
 import '../../widgets/paged_list.dart';
 import '../../widgets/form.dart';
 import '../../widgets/ui.dart';
+import 'rep_details_screen.dart';
 import 'targets_pdf_screen.dart';
 
-/// التارجت والعمولات (managers): each rep's monthly / yearly targets, progress and commission.
+/// المناديب (managers): each rep's monthly / yearly targets, progress and commission; tap a rep for everything about them.
 class TargetsScreen extends StatefulWidget {
   const TargetsScreen({super.key});
 
@@ -156,6 +157,10 @@ class _TargetsScreenState extends State<TargetsScreen> {
             itemBuilder: (context, r) => _RepCard(
               rep: r,
               onEdit: () => _edit(r),
+              onOpen: () => push(
+                context,
+                RepDetailsScreen(id: r.id, name: r.name, period: _period),
+              ),
               onPrint: () =>
                   push(context, TargetsPdfScreen(period: _period, repId: r.id)),
             ),
@@ -170,11 +175,13 @@ class _RepCard extends StatelessWidget {
   const _RepCard({
     required this.rep,
     required this.onEdit,
+    required this.onOpen,
     required this.onPrint,
   });
 
   final TargetRow rep;
   final VoidCallback onEdit;
+  final VoidCallback onOpen;
   final VoidCallback onPrint;
 
   @override
@@ -182,70 +189,79 @@ class _RepCard extends StatelessWidget {
     final r = rep;
     final muted = TextStyle(fontSize: 12.5, color: context.colors.muted);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    r.name,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      r.name,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
                   ),
-                ),
-                if (!r.isActive) const StatusBadge('موقوف', tone: Tone.danger),
-                IconButton(
-                  icon: const Icon(Icons.print_outlined),
-                  tooltip: 'طباعة تقرير ${r.name}',
-                  onPressed: onPrint,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined),
-                  tooltip: 'تعديل تارجت ${r.name}',
-                  onPressed: onEdit,
-                ),
-              ],
-            ),
-            if (r.hasMonthly || r.hasYearly)
-              Text(
-                [
-                  if (r.hasMonthly) 'تارجت شهري',
-                  if (r.hasYearly) 'تارجت سنوي',
-                ].join(' · '),
-                style: muted,
+                  if (!r.isActive)
+                    const StatusBadge('موقوف', tone: Tone.danger),
+                  IconButton(
+                    icon: const Icon(Icons.print_outlined),
+                    tooltip: 'طباعة تقرير ${r.name}',
+                    onPressed: onPrint,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'تعديل تارجت ${r.name}',
+                    onPressed: onEdit,
+                  ),
+                ],
               ),
-            _Progress(
-              label: 'المبيعات',
-              value: r.netSales,
-              target: r.salesGoal,
-              progress: r.salesProgress,
-            ),
-            if (r.returns > 0) Text('مرتجع ${money(r.returns)}', style: muted),
-            const SizedBox(height: 10),
-            _Progress(
-              label: 'التحصيل',
-              value: r.collected,
-              target: r.collectionGoal,
-              progress: r.collectionProgress,
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'عمولة ${number(r.salesCommissionRate)}% مبيعات · ${number(r.collectionCommissionRate)}% تحصيل',
-                    style: muted,
-                  ),
-                ),
+              if (r.hasMonthly || r.hasYearly)
                 Text(
-                  money(r.commission),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                  [
+                    if (r.hasMonthly) 'تارجت شهري',
+                    if (r.hasYearly) 'تارجت سنوي',
+                  ].join(' · '),
+                  style: muted,
                 ),
-              ],
-            ),
-          ],
+              _Progress(
+                label: 'المبيعات',
+                value: r.netSales,
+                target: r.salesGoal,
+                progress: r.salesProgress,
+              ),
+              if (r.returns > 0)
+                Text('مرتجع ${money(r.returns)}', style: muted),
+              const SizedBox(height: 10),
+              _Progress(
+                label: 'التحصيل',
+                value: r.collected,
+                target: r.collectionGoal,
+                progress: r.collectionProgress,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'عمولة ${number(r.salesCommissionRate)}% مبيعات · ${number(r.collectionCommissionRate)}% تحصيل',
+                      style: muted,
+                    ),
+                  ),
+                  Text(
+                    money(r.commission),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

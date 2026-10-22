@@ -10,6 +10,7 @@ import '../../widgets/async_view.dart';
 import '../../widgets/ui.dart';
 import '../documents/document_pdf_screen.dart';
 import '../documents/purchase_screen.dart';
+import '../inventory/stock_move_screen.dart';
 import '../sales/sales_widgets.dart';
 import 'supplier_form.dart';
 import 'supplier_payment_form.dart';
@@ -37,7 +38,8 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
     final inv = context.app.inventory;
     final (s, m, p) = await (
       inv.supplier(widget.id),
-      inv.movements(supplierId: widget.id, type: 'RECEIVE'),
+      // Receipts and supplier returns (the only movements with a supplier).
+      inv.movements(supplierId: widget.id),
       inv.supplierPayments(widget.id),
     ).wait;
     return (supplier: s, purchases: m, payments: p);
@@ -62,6 +64,17 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                   _ctl.reload();
                 },
                 child: const Text('وارد من المورد ده'),
+              ),
+            if (s.receipts > 0)
+              OutlinedButton(
+                onPressed: () async {
+                  final saved = await push(
+                    context,
+                    StockMoveScreen(type: 'SUPPLIER_RETURN', supplierId: s.id),
+                  );
+                  if (saved != null) _ctl.reload();
+                },
+                child: const Text('مرتجع للمورد ده'),
               ),
             if (s.isActive && s.debt > 0)
               OutlinedButton(
@@ -126,8 +139,11 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
               StatGrid(
                 children: [
                   StatCard(
-                    label: 'المديونية الحالية',
-                    value: money(s.debt),
+                    // Negative: returns went beyond the debt, the supplier owes the company.
+                    label: s.debt < 0
+                        ? 'رصيد لينا عند المورد'
+                        : 'المديونية الحالية',
+                    value: money(s.debt.abs()),
                     valueColor: s.debt > 0
                         ? context.colors.danger
                         : context.colors.successFg,
@@ -164,7 +180,7 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                       ),
               ),
               SectionCard(
-                title: 'المشتريات',
+                title: 'المشتريات والمرتجعات',
                 empty: 'مفيش توريد من المورد ده لسه.',
                 children: [
                   for (final m in d.purchases)
@@ -172,8 +188,22 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
                       m: m,
                       onTap: () => push(
                         context,
-                        DocumentPdfScreen(type: 'PURCHASE', id: m.id),
+                        DocumentPdfScreen(type: m.documentType!, id: m.id),
                       ),
+                      onCancel:
+                          m.type != 'SUPPLIER_RETURN' || m.cancelledAt != null
+                          ? null
+                          : () async {
+                              final updated = await cancelWithReason(
+                                context,
+                                title: 'إلغاء المرتجع',
+                                message:
+                                    'الإلغاء يرجع البضاعة للمخزن والمبلغ على مديونية المورد.',
+                                cancel: (r) =>
+                                    repo.cancelSupplierReturn(m.id, r),
+                              );
+                              if (updated != null) _ctl.reload();
+                            },
                     ),
                 ],
               ),
@@ -219,10 +249,13 @@ class _SupplierDetailsScreenState extends State<SupplierDetailsScreen> {
 /// A purchase receipt row: item quantities/prices stand out in an accent color, and the
 /// total is colored by whether it's fully paid.
 class _PurchaseTile extends StatelessWidget {
-  const _PurchaseTile({required this.m, required this.onTap});
+  const _PurchaseTile({required this.m, required this.onTap, this.onCancel});
 
   final Movement m;
   final VoidCallback onTap;
+
+  /// Active supplier returns only.
+  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -241,7 +274,7 @@ class _PurchaseTile extends StatelessWidget {
                 spacing: 3,
                 children: [
                   Text(
-                    '${shortDate(m.createdAt)} · ${m.warehouse?.name ?? '—'}',
+                    '${m.type == 'SUPPLIER_RETURN' ? (m.cancelledAt != null ? 'مرتجع ملغى · ' : 'مرتجع · ') : ''}${shortDate(m.createdAt)} · ${m.warehouse?.name ?? '—'}',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   for (final i in m.items)
@@ -270,6 +303,11 @@ class _PurchaseTile extends StatelessWidget {
                         color: c.danger,
                       ),
                     ),
+                  if (m.cancelReason != null)
+                    Text(
+                      'سبب الإلغاء: ${m.cancelReason}',
+                      style: TextStyle(fontSize: 12, color: c.muted),
+                    ),
                   if (m.notes != null)
                     Text(
                       m.notes!,
@@ -283,7 +321,7 @@ class _PurchaseTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  money(m.totalCost),
+                  '${m.type == 'SUPPLIER_RETURN' ? '− ' : ''}${money(m.totalCost)}',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
@@ -297,6 +335,12 @@ class _PurchaseTile extends StatelessWidget {
                   ),
               ],
             ),
+            if (onCancel != null)
+              IconButton(
+                tooltip: 'إلغاء المرتجع',
+                onPressed: onCancel,
+                icon: Icon(Icons.cancel_outlined, color: c.danger),
+              ),
             const SizedBox(width: 4),
             Icon(Icons.chevron_left, size: 20, color: c.muted),
           ],

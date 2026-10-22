@@ -208,6 +208,7 @@ const documentTypes = [
   'SALE_RETURN',
   'COLLECTION',
   'PURCHASE',
+  'SUPPLIER_RETURN',
   'ISSUE',
   'RETURN',
   'DEPOSIT',
@@ -217,6 +218,7 @@ const documentTypeLabels = {
   'SALE_RETURN': 'فاتورة مرتجع',
   'COLLECTION': 'إيصال تحصيل',
   'PURCHASE': 'فاتورة شراء (مورد)',
+  'SUPPLIER_RETURN': 'فاتورة مرتجع مورد',
   'ISSUE': 'إذن صرف عهدة',
   'RETURN': 'إذن مرتجع عهدة',
   'DEPOSIT': 'إيصال توريد للخزنة',
@@ -226,6 +228,7 @@ const documentPartyLabels = {
   'SALE_RETURN': 'العميل',
   'COLLECTION': 'العميل',
   'PURCHASE': 'المورد',
+  'SUPPLIER_RETURN': 'المورد',
   'ISSUE': 'المندوب',
   'RETURN': 'المندوب',
   'DEPOSIT': 'المندوب',
@@ -522,6 +525,7 @@ class TargetRow {
 }
 
 typedef TargetDoc = ({
+  String id,
   String number,
   DateTime date,
   String customer,
@@ -537,6 +541,7 @@ class RepTargetReport {
       invoices = [
         for (final i in j['invoices'] as List)
           (
+            id: i['id'] as String,
             number: i['invoiceNumber'] as String,
             date: toDate(i['createdAt'])!,
             customer: i['customer']['name'] as String,
@@ -549,6 +554,7 @@ class RepTargetReport {
       returns = [
         for (final r in j['returns'] as List)
           (
+            id: r['id'] as String,
             number: '${r['number']}',
             date: toDate(r['createdAt'])!,
             customer: r['customer']['name'] as String,
@@ -560,6 +566,7 @@ class RepTargetReport {
       collections = [
         for (final c in j['collections'] as List)
           (
+            id: c['id'] as String,
             number: c['receiptNumber'] as String,
             date: toDate(c['createdAt'])!,
             customer: c['customer']['name'] as String,
@@ -568,7 +575,41 @@ class RepTargetReport {
             detail:
                 '${methodLabel(c['paymentMethod'] as String?)}${_bounced(c)}',
           ),
-      ];
+      ],
+      visits = [
+        for (final v in j['visits'] as List)
+          (
+            id: v['id'] as String,
+            date: toDate(v['scheduledAt'])!,
+            customer: v['customer']['name'] as String,
+            purpose: v['purpose'] as String,
+            status: v['status'] as String,
+          ),
+      ],
+      expenses = [
+        for (final e in j['expenses'] as List)
+          (
+            date: toDate(e['createdAt'])!,
+            category: toStr(e['category']),
+            notes: toStr(e['notes']),
+            amount: toNum(e['amount']),
+            pending: e['depositStatus'] == 'PENDING',
+          ),
+      ],
+      custody = [
+        for (final s in j['custody'] as List)
+          (
+            name: s['product']['name'] as String,
+            unit: s['product']['unit'] as String?,
+            quantity: toNum(s['quantity']),
+            value: toNum(s['quantity']) * toNum(s['product']['price']),
+          ),
+      ],
+      warehouse = (j['warehouse'] as Json?)?['name'] as String?,
+      governorates = [...?(j['governorates'] as List?)?.cast<String>()],
+      cashTotal = toNum((j['cashBox'] as Json?)?['total']),
+      cash = toNum((j['cashBox'] as Json?)?['cash']),
+      cashExpenses = toNum((j['cashBox'] as Json?)?['expenses']);
 
   final TargetRow rep;
 
@@ -576,6 +617,23 @@ class RepTargetReport {
   final List<TargetDoc> invoices;
   final List<TargetDoc> returns;
   final List<TargetDoc> collections;
+
+  final List<
+    ({String id, DateTime date, String customer, String purpose, String status})
+  >
+  visits;
+  final List<
+    ({DateTime date, String? category, String? notes, num amount, bool pending})
+  >
+  expenses;
+
+  /// Right now, not for the period: custody stock, warehouse and cash box.
+  final List<({String name, String? unit, num quantity, num value})> custody;
+  final String? warehouse;
+  final List<String> governorates;
+  final num cashTotal;
+  final num cash;
+  final num cashExpenses;
 
   static String _bounced(dynamic d) =>
       d['chequeStatus'] == 'BOUNCED' ? ' (شيك مرتد - غير محسوب)' : '';
